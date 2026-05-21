@@ -75,6 +75,7 @@ typedef enum
 	DY50_CMD_GEN_CHAR  			=  0x02,
 	DY50_CMD_REG_MODEL 			=  0x05,
 	DY50_CMD_VERIFY_PASSWORD 	=  0x13,
+	DY50_CMD_READ_SYSTEM_PARAMS =  0x0F,
 }DY50_Commands_t;
 
 typedef enum
@@ -122,7 +123,16 @@ typedef struct
 
 typedef struct
 {
+	uint16_t database_capacity;
+	uint8_t  security_level;
+	uint8_t packet_size;
+	uint8_t  baund_rate;    //9600 x baundrate conf
+}DY50_Info_t;
+
+typedef struct
+{
 	UART_HandleTypeDef *huart;
+	DY50_Info_t info;
 	DY50_Gpio_t touch_gpio;
 	DY50_Buffer_t buf_tx;
 	DY50_Buffer_t buf_rx;
@@ -131,7 +141,8 @@ typedef struct
 }DY50_Typedef_t;
 
 void DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *touch_gpio_port, uint16_t touch_gpio_pin);
-DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, uint8_t cmd, uint16_t payload_len);
+DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, uint8_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len);
+DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password);
 DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id);
