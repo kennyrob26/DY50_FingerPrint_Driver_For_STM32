@@ -8,6 +8,10 @@
 
 #include "dy50.h"
 
+#include "string.h"
+
+#include "math.h"
+
 uint8_t response;
 
 
@@ -132,6 +136,92 @@ DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
 
 	return DY50_SendCommand(dy50, DY50_CMD_VERIFY_PASSWORD, 4, PACKET_NOT_PAYLOAD);
 }
+
+
+DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value)
+{
+	if(dy50 == NULL)
+		return	ACK_ERROR_HANDLER_NOT_DEFINED;
+
+	if(index >= dy50->info.database_capacity)
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	uint8_t buffer_index = (uint8_t)(index/8);
+
+	uint8_t bit_index = (uint8_t) (index % 8);     //map 0 to 7 value
+	bit_index = (uint8_t)(0x01 << (7 - bit_index));//map to hex value
+
+	if(value == 1)
+		dy50->info.table_index[buffer_index] |= bit_index;
+	else if(value == 0)
+		dy50->info.table_index[buffer_index] &= ~bit_index;
+
+	return ACK_OK;
+
+}
+
+int16_t Dy50_FindFirstIndexFree(DY50_Typedef_t *dy50)
+{
+	if(dy50 == NULL)
+		return	ACK_ERROR_HANDLER_NOT_DEFINED;
+
+	uint8_t bytes  = (dy50->info.database_capacity / 8) + 1;
+
+	uint8_t current_byte = 0;
+
+	while(current_byte < bytes)
+	{
+		uint8_t current_byte_value = dy50->info.table_index[current_byte];
+		if(current_byte_value == 0xFF)	//Byte is Full
+			current_byte++;
+		else
+		{
+			uint8_t bit_index = 7;
+
+			for(uint8_t i=7; i>0; i--)
+			{
+				if(((current_byte_value >> i) & 0x01) == 0)
+				{
+					bit_index = 7 - i;
+					break;
+				}
+			}
+
+			uint16_t index_result = (uint16_t)(current_byte * 8) + bit_index;
+
+			if(index_result < dy50->info.database_capacity)
+				return index_result;
+		}
+	}
+
+	return -1;   //Erro
+}
+
+DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50)
+{
+	if(dy50 == NULL)
+		return	ACK_ERROR_HANDLER_NOT_DEFINED;
+
+	DY50_AckCode_t code_ack;
+
+	//Get page 0
+	dy50->buf_tx.packet.payload[0] = 0x00;
+	code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, 1, 32);
+	memcpy(dy50->info.table_index, dy50->buf_tx.packet.payload, 32);
+
+	//Get page 1 (if indexs>256)
+	if((code_ack == ACK_OK) && (dy50->info.database_capacity > 256))
+	{
+		dy50->buf_tx.packet.payload[0] = 0x01;
+		code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, 1, 32);
+		memcpy(&dy50->info.table_index[32], dy50->buf_tx.packet.payload, 32);
+	}
+
+
+
+	return code_ack;
+}
+
 
 DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50)
 {

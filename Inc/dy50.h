@@ -13,7 +13,7 @@
 #define SWAP16(x) (((x) >> 8) | ((x) << 8))
 #define SWAP32(x) (((x) >> 24) | (((x) & 0x00FF0000) >> 8) | (((x) & 0x0000FF00) << 8) | ((x) << 24))
 
-#define PAYLOAD_TX_SIZE 32
+#define PAYLOAD_TX_SIZE 34
 
 #define DY50_HEADER  (uint16_t) SWAP16(0xEF01)
 #define DY50_ADDRESS (uint32_t) SWAP32(0xFFFFFFFF)
@@ -76,6 +76,7 @@ typedef enum
 	DY50_CMD_REG_MODEL 			=  0x05,
 	DY50_CMD_VERIFY_PASSWORD 	=  0x13,
 	DY50_CMD_READ_SYSTEM_PARAMS =  0x0F,
+	DY50_CMD_READ_INDEX_TABLE   =  0x1F
 }DY50_Commands_t;
 
 typedef enum
@@ -121,12 +122,14 @@ typedef struct
 	uint32_t debouncing_init_time;
 }DY50_Enroll_t;
 
+
 typedef struct
 {
 	uint16_t database_capacity;
 	uint8_t  security_level;
 	uint8_t packet_size;
 	uint8_t  baund_rate;    //9600 x baundrate conf
+	uint8_t table_index[64];
 }DY50_Info_t;
 
 typedef struct
@@ -144,6 +147,8 @@ void DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *to
 DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, uint8_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len);
 DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password);
+DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value);
+int16_t Dy50_FindFirstIndexFree(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id);
 DY50_AckCode_t DY50_GenerateChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id);
