@@ -18,6 +18,8 @@
 #define DY50_HEADER  (uint16_t) SWAP16(0xEF01)
 #define DY50_ADDRESS (uint32_t) SWAP32(0xFFFFFFFF)
 
+#define DY50_PASSWORD	0x00000000
+
 #define PACKET_NOT_PAYLOAD 0
 #define ACK_PACKET_SIZE 12
 
@@ -45,7 +47,14 @@ typedef struct
 	uint16_t pin;
 }DY50_Gpio_t;
 
-
+typedef enum
+{
+	DY50_INIT_DEFINE_PARAMS      = 0,
+	DY50_INIT_READ_SYSTEM_PARAMS = 1,
+	DY50_INIT_VERIFY_PASSWORD    = 2,
+	DY50_INIT_COMPLETE           = 3,
+	DY50_INIT_ERROR              = 4,
+}DY50_Init_State_Machine;
 
 typedef enum
 {
@@ -58,6 +67,7 @@ typedef enum
 	ACK_ERROR_IMAGE_IS_AMORPHOUS  = 0x06,
 	ACK_ERROR_IMAGE_IS_TOO_LITTLE = 0x07,
 
+	ACK_ERROR_DY50_UNINITIALIZED  = 244,
 	ACK_ERROR_TABLE_ID_IS_FULL    = 245,
 	ACK_ERROR_IMPOSSIBLE_STATE    = 246,
 	ACK_ERROR_MAX_ATTEMPS         = 247,
@@ -135,9 +145,17 @@ typedef struct
 	uint8_t table_index[64];
 }DY50_Info_t;
 
+typedef enum
+{
+	DY50_STATUS_UNINITIALIZED  = 0,
+	DY50_STATUS_IDLE           = 1,
+	SY50_STATUS_ENROLL_HANDLER = 2,
+}DY50_Status_t;
+
 typedef struct
 {
 	UART_HandleTypeDef *huart;
+	DY50_Status_t status;
 	DY50_Info_t info;
 	DY50_Gpio_t touch_gpio;
 	DY50_Buffer_t buf_tx;
@@ -146,13 +164,13 @@ typedef struct
 	uint8_t touch_flag;
 }DY50_Typedef_t;
 
-void DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *touch_gpio_port, uint16_t touch_gpio_pin);
+DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *touch_gpio_port, uint16_t touch_gpio_pin);
 DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, uint8_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len);
 DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password);
 DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value);
-int16_t Dy50_FindFirstIndexFree(DY50_Typedef_t *dy50);
-DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50);
+int16_t DY50_FindFirstFreeID(DY50_Typedef_t *dy50);
+DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTable[], uint8_t size);
 DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id);
 DY50_AckCode_t DY50_GenerateChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id);
