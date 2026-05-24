@@ -149,7 +149,8 @@ DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t 
 	uint8_t buffer_index = (uint8_t)(index/8);
 
 	uint8_t bit_index = (uint8_t) (index % 8);     //map 0 to 7 value
-	bit_index = (uint8_t)(0x01 << (7 - bit_index));//map to hex value
+	//bit_index = (uint8_t)(0x01 << (7 - bit_index));//map to hex value
+	bit_index = (uint8_t)(0x01 << bit_index);
 
 	if(value == 1)
 		dy50->info.table_index[buffer_index] |= bit_index;
@@ -176,13 +177,24 @@ int16_t Dy50_FindFirstIndexFree(DY50_Typedef_t *dy50)
 			current_byte++;
 		else
 		{
-			uint8_t bit_index = 7;
+//			uint8_t bit_index = 7;
+//
+//			for(uint8_t i=7; i>0; i--)
+//			{
+//				if(((current_byte_value >> i) & 0x01) == 0)
+//				{
+//					bit_index = 7 - i;
+//					break;
+//				}
+//			}
 
-			for(uint8_t i=7; i>0; i--)
+			uint8_t bit_index;
+
+			for(uint8_t i=0; i<8; i++)
 			{
 				if(((current_byte_value >> i) & 0x01) == 0)
 				{
-					bit_index = 7 - i;
+					bit_index = i;
 					break;
 				}
 			}
@@ -207,14 +219,14 @@ DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50)
 	//Get page 0
 	dy50->buf_tx.packet.payload[0] = 0x00;
 	code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, 1, 32);
-	memcpy(dy50->info.table_index, dy50->buf_tx.packet.payload, 32);
+	memcpy(dy50->info.table_index, dy50->buf_rx.packet.payload, 32);
 
 	//Get page 1 (if indexs>256)
 	if((code_ack == ACK_OK) && (dy50->info.database_capacity > 256))
 	{
 		dy50->buf_tx.packet.payload[0] = 0x01;
 		code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, 1, 32);
-		memcpy(&dy50->info.table_index[32], dy50->buf_tx.packet.payload, 32);
+		memcpy(&dy50->info.table_index[32], dy50->buf_rx.packet.payload, 32);
 	}
 
 
@@ -242,9 +254,7 @@ DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id
 		return ACK_ERROR_INVALID_PARAMETER;
 
 	dy50->buf_tx.packet.payload[0] = buffer_id;
-	dy50->buf_tx.packet.payload[1] = '\0';
 
-	//dy50->buf_rx.packet.code = 25;
 	return(DY50_SendCommand(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD));
 }
 
@@ -267,6 +277,30 @@ DY50_AckCode_t DY50_CMD_RegModel(DY50_Typedef_t *dy50)
 		return	ACK_ERROR_HANDLER_NOT_DEFINED;
 
 	return(DY50_SendCommand(dy50, DY50_CMD_REG_MODEL, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD));
+}
+
+DY50_AckCode_t DY50_CMD_StoreChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t page_id)
+{
+	if(dy50 == NULL)
+		return	ACK_ERROR_HANDLER_NOT_DEFINED;
+
+	if(page_id >= dy50->info.database_capacity)
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	DY50_AckCode_t ack_code;
+
+	dy50->buf_tx.packet.payload[0] = buffer_id;
+	dy50->buf_tx.packet.payload[1] = (uint8_t)((page_id >> 8) & 0x00FF);
+	dy50->buf_tx.packet.payload[2] = (uint8_t)(page_id & 0x00FF);
+
+	ack_code = DY50_SendCommand(dy50, DY50_CMD_STORE_CHAR, 3, PACKET_NOT_PAYLOAD);
+
+	if(ack_code == ACK_OK)
+	{
+		DY50_SetIndexTable(dy50, page_id, 1);
+	}
+
+	return ack_code;
 }
 
 static inline uint8_t checkIfBadImageError(DY50_AckCode_t error)
@@ -316,6 +350,10 @@ DY50_AckCode_t DY50_Enroll(DY50_Typedef_t *dy50)
 	if(dy50->enroll.last_state == DY50_ENROLL_STATE_IDLE)
 	{
 		dy50->enroll.last_measure_time = HAL_GetTick(); //Reset time in first reading
+		dy50->enroll.table_id = Dy50_FindFirstIndexFree(dy50);
+
+		if(dy50->enroll.table_id < 0)
+			return ACK_ERROR_TABLE_ID_IS_FULL;
 	}
 
 	if(dy50->enroll.last_state != DY50_ENROLL_STATE_COMPLETE)
@@ -400,9 +438,17 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50)
 
 				if((ackCodeEnroll == ACK_OK) && (dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE))
 				{
-					if(DY50_CMD_RegModel(dy50) != ACK_OK)
+					ackCodeEnroll = DY50_CMD_RegModel(dy50);
+					if(ackCodeEnroll == ACK_OK)
 					{
-					  dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
+						ackCodeEnroll = DY50_CMD_StoreChar(dy50, DY50_BUFFER_ID_1, dy50->enroll.table_id);
+
+						if(ackCodeEnroll != ACK_OK)
+							dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;  //StoreChar Error
+					}
+					else
+					{
+					  dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;			//RegModel Error
 					}
 				}
 
@@ -424,31 +470,6 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50)
 				break;
 		}
 
-		/*
-		if(finger_state == DY50_FINGER_IN_TOUCH_ACCEPTED)
-		{
-			DY50_AckCode_t ackCodeEnroll = DY50_Enroll(dy50);
-
-			if((ackCodeEnroll == ACK_OK) && (dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE))
-			{
-				if(DY50_CMD_RegModel(dy50) != ACK_OK)
-				{
-				  dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
-				}
-			}
-
-
-			DY50_EnrolResponseCallBack(dy50, ackCodeEnroll);
-
-			if(dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE)
-				dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
-
-			dy50->touch_flag = 0;
-		}
-		else if(finger_state == DY50_FINGER_NOT_IN_TOUCH) //false positive flag
-		{
-			dy50->touch_flag = 0;
-		}*/
 	}
 }
 

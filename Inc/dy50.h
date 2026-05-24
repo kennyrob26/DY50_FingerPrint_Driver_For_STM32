@@ -58,6 +58,7 @@ typedef enum
 	ACK_ERROR_IMAGE_IS_AMORPHOUS  = 0x06,
 	ACK_ERROR_IMAGE_IS_TOO_LITTLE = 0x07,
 
+	ACK_ERROR_TABLE_ID_IS_FULL    = 245,
 	ACK_ERROR_IMPOSSIBLE_STATE    = 246,
 	ACK_ERROR_MAX_ATTEMPS         = 247,
 	ACK_ERROR_TIMEOUT             = 248,
@@ -74,6 +75,7 @@ typedef enum
 	DY50_CMD_GET_IMAGE 			=  0x01,
 	DY50_CMD_GEN_CHAR  			=  0x02,
 	DY50_CMD_REG_MODEL 			=  0x05,
+	DY50_CMD_STORE_CHAR         =  0x06,
 	DY50_CMD_VERIFY_PASSWORD 	=  0x13,
 	DY50_CMD_READ_SYSTEM_PARAMS =  0x0F,
 	DY50_CMD_READ_INDEX_TABLE   =  0x1F
@@ -120,6 +122,7 @@ typedef struct
 	DY50_EnrollState_t last_state;
 	uint32_t last_measure_time;
 	uint32_t debouncing_init_time;
+	int16_t table_id;
 }DY50_Enroll_t;
 
 
@@ -149,6 +152,7 @@ DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password);
 DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value);
 int16_t Dy50_FindFirstIndexFree(DY50_Typedef_t *dy50);
+DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id);
 DY50_AckCode_t DY50_GenerateChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id);
