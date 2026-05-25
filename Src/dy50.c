@@ -14,7 +14,18 @@
 
 uint8_t response;
 
-
+/**
+ * @brief DY50 Initialization function
+ *
+ * @note This is an important function that should be called before all others
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param huart Is a pointer for UART Handler
+ * @param touch_gpio_port Is a pointer for touch gpio port
+ * @param touch_gpio_port Is the touch gpio pin
+ *
+ * @retval initialization state code
+ */
 DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *touch_gpio_port, uint16_t touch_gpio_pin)
 {
 	if((dy50 == NULL) || (huart == NULL) || (touch_gpio_port == NULL))
@@ -71,8 +82,16 @@ DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_
 
 }
 
-
-
+/*
+ * @brief Check if received packete is valid
+ *
+ * @note This function receive a DY50_packet_t and verify if is valid,
+ * 		 According to the datasheet, a packet is valid if the response flag is 0x07
+ *
+ * @param packet is the response packet that will be verified
+ *
+ * @retval return 1 if packet is valid
+ */
 inline static uint8_t DY50_PacketAckIsValid(DY50_packet_t *packet)
 {
 	if(packet->header == DY50_HEADER && packet->flag == 0x07)
@@ -81,6 +100,18 @@ inline static uint8_t DY50_PacketAckIsValid(DY50_packet_t *packet)
 	return 0;
 }
 
+/*
+ * @brief Calculate a checksum for package
+ *
+ * @note This function receive a DY50_packet_t and calculate your checksum
+ * 	     The calculation is based on the Datasheet, the formula consists of
+ * 	     summing all all the bytes after the packet flag
+ *
+ * @param packet is the response packet whose checksum we will calculate
+ * @param payload_len is the payload size
+ *
+ * @retval none
+ */
 inline static void DY50_CalcCheckSum(DY50_packet_t *packet, uint16_t payload_len)
 {
 	uint16_t checksum  = 0;
@@ -102,8 +133,18 @@ inline static void DY50_CalcCheckSum(DY50_packet_t *packet, uint16_t payload_len
 }
 
 
-
-DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, uint8_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len)
+/*
+ * @brief The command sending function
+ *
+ * @note This function is the basis for sending all commands,
+ * 		 an important point is tx_package and rx_package:
+ * 		 tx_package -> contains all bytes of transmit
+ * 		 rx_package -> contains all received bytes
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ */
+DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
