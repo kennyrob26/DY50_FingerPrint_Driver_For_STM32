@@ -169,7 +169,7 @@ DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint1
 DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password);
 DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value);
-int16_t DY50_FindFirstFreeID(DY50_Typedef_t *dy50);
+int16_t DY50_FindFirstFreeIDInIndexTable(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTable[], uint8_t size);
 DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id);

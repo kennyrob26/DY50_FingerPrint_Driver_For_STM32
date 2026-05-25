@@ -112,7 +112,7 @@ inline static uint8_t DY50_PacketAckIsValid(DY50_packet_t *packet)
  *
  * @retval none
  */
-inline static void DY50_CalcCheckSum(DY50_packet_t *packet, uint16_t payload_len)
+static inline void DY50_CalcCheckSum(DY50_packet_t *packet, uint16_t payload_len)
 {
 	uint16_t checksum  = 0;
 	checksum  = packet->flag;
@@ -137,11 +137,19 @@ inline static void DY50_CalcCheckSum(DY50_packet_t *packet, uint16_t payload_len
  * @brief The command sending function
  *
  * @note This function is the basis for sending all commands,
- * 		 an important point is tx_package and rx_package:
- * 		 tx_package -> contains all bytes of transmit
- * 		 rx_package -> contains all received bytes
+ * 		 an important point is tx_package and rx_package.
+ *
+ * 		 Use dy50 handler to get the response to a command:
+ *
+ * 		 dy50->buf_tx.packet -> contains all bytes of transmit
+ * 		 dy50->buf_rx.packet -> contains all received bytes
  *
  * @param dy50  Is a pointer for dy50 handler
+ * @param cmd   The command to be sent
+ * @param tx_payload_len It is the payload capacity of the transmission
+ * @param rx_payload_len It is the payload capacity of the receiving
+ *
+ * @retval Returns whether the command was successful
  *
  */
 DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len)
@@ -181,6 +189,15 @@ DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint1
 
 }
 
+/*
+ * @brief Reads and Stores system parameters
+ *
+ * @note Use the "ReadSysPara" command to obtain relevant system information
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @retval Returns whether it was possible to obtain the data
+ */
 DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
@@ -206,6 +223,14 @@ DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50)
 	return ack_code;
 }
 
+/*
+ * @brief Check password
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param password this is the password we will use
+ *
+ * @retval Returns whether the password was verified
+ */
 DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
@@ -215,18 +240,27 @@ DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
 	dy50->buf_tx.packet.payload[1] = (uint8_t)((password >> 16) & 0x000000FF);
 	dy50->buf_tx.packet.payload[2] = (uint8_t)((password >> 8)  & 0x000000FF);
 	dy50->buf_tx.packet.payload[3] = (uint8_t)(password  & 0x000000FF);
-	//dy50->buf_tx.packet.payload[4] = '\0'; //End string
 
 	return DY50_SendCommand(dy50, DY50_CMD_VERIFY_PASSWORD, 4, PACKET_NOT_PAYLOAD);
 }
 
-
+/*
+ * @brief Sets an ID in Table Index
+ *
+ * @note Set an ID as marked in the Index table
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param index is the index we want to mark
+ * @param value use 1 to select the ID and 0 to deselect the ID
+ *
+ * @retval Returns whether it was possible to set the value in the ID
+ */
 DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	if(index >= dy50->info.database_capacity)
+	if((index >= dy50->info.database_capacity) || (value > 1))
 		return ACK_ERROR_INVALID_PARAMETER;
 
 	uint8_t buffer_index = (uint8_t)(index/8);
@@ -243,7 +277,15 @@ DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t 
 
 }
 
-uint8_t DY50_GetBitIndex(uint8_t byte_value, uint8_t byte_size)
+/*
+ * @brief Receives a byte and finds a first free bit (0)
+ *
+ * @param byte_value is a target byte
+ * @param byte_size the number of valid bits in the byte
+ *
+ * @retval return the bit index, if it exists, or returns 0xFF if the byte is full
+ */
+static inline uint8_t DY50_GetBitIndex(uint8_t byte_value, uint8_t byte_size)
 {
 
 	for(uint8_t i=0; i<byte_size; i++)
@@ -254,7 +296,14 @@ uint8_t DY50_GetBitIndex(uint8_t byte_value, uint8_t byte_size)
 	return 0xFF;  //Is FULL
 }
 
-int16_t DY50_FindFirstFreeID(DY50_Typedef_t *dy50)
+/*
+ * @brief Find the first free ID in Index Table
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @retval returns the first index found, or -1 in case of error or full table
+ */
+int16_t DY50_FindFirstFreeIDInIndexTable(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -265,8 +314,6 @@ int16_t DY50_FindFirstFreeID(DY50_Typedef_t *dy50)
 
 	while(current_byte < bytes)
 	{
-
-
 		uint8_t current_byte_value = dy50->info.table_index[current_byte];
 
 
