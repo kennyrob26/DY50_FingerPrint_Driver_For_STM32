@@ -350,26 +350,60 @@ int16_t DY50_FindFirstFreeIDInIndexTable(DY50_Typedef_t *dy50)
 	return -1;   //Erro
 }
 
+
+/*
+ * @brief Reading the Index Table on dy50
+ *
+ * @note According to the data sheet, Index Table it contains all the IDs for DY50, the Table
+ * 		 is divided into 2 pages, where each page has 32 bytes.
+ * 		 The actual size of the table is defined for dy50->info.database_capacity
+ *
+ * 		 The readIndexTable[] received all ids, each bit represents one ID, where:
+ *
+ * 		 bit == 0 -> ID position is empty
+ * 		 bit == 1 -> ID position is filled
+ *
+ * 	@param dy50  Is a pointer for dy50 handler
+ * 	@param readIndexTable[] the array that receives all the IDs
+ * 	@param size is a size of readIndexTable[], The size determines how much data will be returned
+ *
+ * 	@retval returns whether it was possible to read the index table
+ *
+ */
 DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTable[], uint8_t size)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	if((uint16_t)(size * 8) < dy50->info.database_capacity)   //Buffer is small
-		return ACK_ERROR_INVALID_PARAMETER;
+	const uint8_t page_size = 32; //based on the datasheet, each page is 32 bytes
+	const uint8_t tx_payload_size = 1;
 
 	DY50_AckCode_t code_ack;
+
 	//Get page 0
 	dy50->buf_tx.packet.payload[0] = 0x00;
-	code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, 1, 32);
-	memcpy(readIndexTable, dy50->buf_rx.packet.payload, 32);
+	code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size);
+
+	if(size >= page_size)
+		memcpy(readIndexTable, dy50->buf_rx.packet.payload, page_size);
+	else
+		memcpy(readIndexTable, dy50->buf_rx.packet.payload, size);
 
 	//Get page 1 (if indexs>256)
 	if((code_ack == ACK_OK) && (dy50->info.database_capacity > 256))
 	{
-		dy50->buf_tx.packet.payload[0] = 0x01;
-		code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, 1, 32);
-		memcpy(&readIndexTable[32], dy50->buf_rx.packet.payload, 32);
+		if(size > page_size)
+		{
+			dy50->buf_tx.packet.payload[0] = 0x01;
+			code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size);
+
+			uint8_t remaining_bytes = (size - 32);
+
+			if(remaining_bytes >= page_size)
+				memcpy(&readIndexTable[32], dy50->buf_rx.packet.payload, page_size);
+			else
+				memcpy(&readIndexTable[32], dy50->buf_rx.packet.payload, remaining_bytes);
+		}
 	}
 
 	return code_ack;
