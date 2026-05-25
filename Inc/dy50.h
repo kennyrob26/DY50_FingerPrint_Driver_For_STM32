@@ -23,6 +23,10 @@
 #define PACKET_NOT_PAYLOAD 0
 #define ACK_PACKET_SIZE 12
 
+#define TOUCH_DEBOUNCE_TIME 200
+
+#define ENROLL_MAX_TIME_IDLE_BETWEEN_READING 8000
+
 
 
 typedef struct __attribute__((packed))
