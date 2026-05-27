@@ -597,12 +597,18 @@ DY50_FingerTouchState_t DY50_FingerIsOnTouch(DY50_Typedef_t *dy50)
  *
  * @note This code is based on the "Enroll Flow" for the datasheet, more details read the datasheet
  *
- * @warning The enroll has a maximum time limit between each reading, this time is defined for ENROLL_MAX_TIME_IDLE_BETWEEN_READING
+ * @warning The enroll has a maximum time limit between each reading, this time is defined for ENROLL_MAX_TIME_IDLE_BETWEEN_READING,
+ * 		    If the time limit expires, all readings will be discarded and the registration will be reset
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @retval Returns whether the enroll flow was successful
+ *
  */
 DY50_AckCode_t DY50_Enroll(DY50_Typedef_t *dy50)
 {
-	if(dy50 == NULL)
-		return	ACK_ERROR_HANDLER_NOT_DEFINED;
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
 
 	DY50_BufferId_t buffer_id;
 	DY50_AckCode_t ack_code;
@@ -672,19 +678,36 @@ DY50_AckCode_t DY50_Enroll(DY50_Typedef_t *dy50)
 }
 
 
-
+/*
+ * @brief Interrupt that monitors the touch of the dy50
+ *
+ * @note This function needs to be inside the callback function that handles the GPIO interrupt for the touch
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @retval none
+ */
 void DY50_FingerTouchInterrupt(DY50_Typedef_t *dy50)
 {
-	if(dy50 == NULL)
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return;
 
 	dy50->enroll.debouncing_init_time = HAL_GetTick();
 	dy50->touch_flag = 1;
 }
 
+/*
+ * @brief Non-blocking function that manages the Enroll flow
+ *
+ * @warning This function should be used in conjunction with the callback function of enroll
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @retval none
+ */
 void DY50_EnrollHandler(DY50_Typedef_t *dy50)
 {
-	if(dy50 == NULL)
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return;
 
 	if(dy50->touch_flag == 1)
@@ -733,6 +756,16 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50)
 	}
 }
 
+/*
+ * @brief Enroll Callback
+ *
+ * @note Weak function example, you must implement the strong function that overrides it
+ *
+ * @warning This function is called by the DY50 Enroll Handler
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param ackCode use to check the status of the last command
+ */
 __weak void DY50_EnrolResponseCallBack(DY50_Typedef_t *dy50, DY50_AckCode_t ackCode)
 {
 
@@ -777,12 +810,63 @@ __weak void DY50_EnrolResponseCallBack(DY50_Typedef_t *dy50, DY50_AckCode_t ackC
 
 }
 
+/*
+ * @brief Command Search (0x04)
+ *
+ * @note Search for a fingerprint in the DY50 flash database. Use this function to check if the fingerprint image
+ *       we just read exists in the DY50 database.
+ *
+ * @param buffer_id is the CharBufferID where the image is located (usually it will be 1)
+ * @param start_page_id  This refers to the page ID in the Flash database where the search begins
+ * @param page_num Defines how many page IDs we will read after the start page
+ *
+ * @retval return if the fingerprint we were looking for was found
+ *
+ * @return 0x00 -> Successfull or 0x09 -> fingerprint not found
+ */
+DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t start_page_id, uint16_t page_num)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	dy50->buf_tx.packet.payload[0] = buffer_id;
+	dy50->buf_tx.packet.payload[1] = (uint8_t)((start_page_id >> 8) & 0x00FF);
+	dy50->buf_tx.packet.payload[2] = (uint8_t)(start_page_id & 0x00FF);
+	dy50->buf_tx.packet.payload[3] = (uint8_t)((page_num >> 8) & 0x00FF);
+	dy50->buf_tx.packet.payload[4] = (uint8_t)(page_num & 0x00FF);
+
+	const uint8_t payload_tx_len = 5,
+		          payload_rx_len = 4;
+
+	return DY50_SendCommand(dy50, Dy50_CMD_SEARCH, payload_tx_len, payload_rx_len);
+}
 
 
+DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50, uint16_t *id_found)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
 
+	DY50_AckCode_t ack_code;
 
+	ack_code = DY50_GenerateChar(dy50, DY50_BUFFER_ID_1);
+	if(ack_code == ACK_OK)
+	{
+		ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, 100);
+		if(ack_code == ACK_OK)
+		{
+			*id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
+			*id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
+		}
+	}
 
+	if(ack_code != ACK_OK)
+	{
+		*id_found = 0xFF;
+	}
 
+	return ack_code;
+}
 
 
 

@@ -71,6 +71,8 @@ typedef enum
 	ACK_ERROR_IMAGE_IS_AMORPHOUS  = 0x06,
 	ACK_ERROR_IMAGE_IS_TOO_LITTLE = 0x07,
 
+	ACK_ERROR_FINGERPRINT_NOT_FOUND = 0x09,		//In Search Command
+
 	ACK_ERROR_DY50_UNINITIALIZED  = 244,
 	ACK_ERROR_TABLE_ID_IS_FULL    = 245,
 	ACK_ERROR_IMPOSSIBLE_STATE    = 246,
@@ -88,6 +90,7 @@ typedef enum
 {
 	DY50_CMD_GET_IMAGE 			=  0x01,
 	DY50_CMD_GEN_CHAR  			=  0x02,
+	Dy50_CMD_SEARCH             =  0x04,
 	DY50_CMD_REG_MODEL 			=  0x05,
 	DY50_CMD_STORE_CHAR         =  0x06,
 	DY50_CMD_VERIFY_PASSWORD 	=  0x13,
@@ -183,8 +186,12 @@ uint8_t DY50_ExistFingerOnTouch(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_Enroll(DY50_Typedef_t *dy50);
 
 void DY50_FingerTouchInterrupt(DY50_Typedef_t *dy50);
+
 void DY50_EnrollHandler(DY50_Typedef_t *dy50);
 void DY50_EnrolResponseCallBack(DY50_Typedef_t *dy50, DY50_AckCode_t ackCode);
+
+DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t start_page_id, uint16_t page_num);
+DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50, uint16_t *id_found);
 #endif /* DY50_DRIVER_FOR_STM32_INC_DY50_H_ */
 
 
