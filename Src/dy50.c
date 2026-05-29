@@ -244,6 +244,50 @@ DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
 	return DY50_SendCommand(dy50, DY50_CMD_VERIFY_PASSWORD, 4, PACKET_NOT_PAYLOAD);
 }
 
+
+/*
+ * @brief Estimates what the last filled ID was
+ *
+ * @note An important function that estimates the last known ID,
+ *       allowing for optimized fingerprint searches in the database.
+ *
+ *       IMPORTANT: The returned value is not the last true ID,
+ *       but rather an estimate, always rounded up
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param start_id is is the initial ID where we intend to begin the search
+ * @param end_id is the final ID, meaning it limits how far we want to search for the last ID
+ */
+int16_t DY50_FindLastIndexFilled(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t end_id)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return -1;
+
+	uint8_t current_byte = start_id / 8;
+	uint8_t end_byte   = end_id / 8;
+
+	int8_t last_byte_id = -1;
+
+	while(current_byte <= end_byte)
+	{
+		if(dy50->info.table_index[current_byte] != 0x00 )
+		{
+			last_byte_id = current_byte;
+		}
+		current_byte++;
+	}
+
+	if(last_byte_id == -1)
+		return start_id;
+
+	uint16_t estimated_id = ((last_byte_id + 1) * 8);
+
+	if(estimated_id >= dy50->info.database_capacity)
+		estimated_id = dy50->info.database_capacity;
+
+	return estimated_id;
+}
+
 /*
  * @brief Sets an ID in Table Index
  *
@@ -841,28 +885,48 @@ DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, 
 	return DY50_SendCommand(dy50, Dy50_CMD_SEARCH, payload_tx_len, payload_rx_len);
 }
 
-
-DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50, uint16_t *id_found)
+/*
+ * @brief Checks if the figerprint exists in the database
+ *
+ * @note It takes the obtained fingerprint and compares it with the fingerprints stored in the database
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param id_found this is the ID found by the search. If it is 0xFFFF, no match was found
+ * @param math_score Returns a value from 0 to 255 indicating how closely the fingerprint matches the one found in the database
+ *
+ * @retval Returns whether the search was successful
+ */
+DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50, uint16_t *id_found, uint8_t *math_score)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
 	DY50_AckCode_t ack_code;
 
-	ack_code = DY50_GenerateChar(dy50, DY50_BUFFER_ID_1);
-	if(ack_code == ACK_OK)
+	int16_t last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
+
+	if(last_id <= 0)
 	{
-		ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, 100);
+		ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
+	}
+	else
+	{
+		ack_code = DY50_GenerateChar(dy50, DY50_BUFFER_ID_1);
 		if(ack_code == ACK_OK)
 		{
-			*id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
-			*id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
+			ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
+			if(ack_code == ACK_OK)
+			{
+				*id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
+				*id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
+
+				*math_score = dy50->buf_rx.packet.payload[3];
+			}
 		}
 	}
-
 	if(ack_code != ACK_OK)
 	{
-		*id_found = 0xFF;
+		*id_found = 0xFFFF;
 	}
 
 	return ack_code;

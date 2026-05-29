@@ -73,6 +73,7 @@ typedef enum
 
 	ACK_ERROR_FINGERPRINT_NOT_FOUND = 0x09,		//In Search Command
 
+	ACK_ERROR                     = 243,
 	ACK_ERROR_DY50_UNINITIALIZED  = 244,
 	ACK_ERROR_TABLE_ID_IS_FULL    = 245,
 	ACK_ERROR_IMPOSSIBLE_STATE    = 246,
@@ -150,6 +151,7 @@ typedef struct
 	uint8_t packet_size;
 	uint8_t  baund_rate;    //9600 x baundrate conf
 	uint8_t table_index[64];
+	uint16_t last_index_filled;
 }DY50_Info_t;
 
 typedef enum
@@ -191,7 +193,7 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50);
 void DY50_EnrolResponseCallBack(DY50_Typedef_t *dy50, DY50_AckCode_t ackCode);
 
 DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t start_page_id, uint16_t page_num);
-DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50, uint16_t *id_found);
+DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50, uint16_t *id_found, uint8_t *math_score);
 #endif /* DY50_DRIVER_FOR_STM32_INC_DY50_H_ */
 
 
