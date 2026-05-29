@@ -143,6 +143,11 @@ typedef struct
 	int16_t table_id;
 }DY50_Enroll_t;
 
+typedef struct
+{
+	uint16_t id_found;
+	uint8_t math_score;
+}DY50_Search_Return_t;
 
 typedef struct
 {
@@ -156,9 +161,10 @@ typedef struct
 
 typedef enum
 {
-	DY50_STATUS_UNINITIALIZED  = 0,
-	DY50_STATUS_IDLE           = 1,
-	SY50_STATUS_ENROLL_HANDLER = 2,
+	DY50_STATUS_UNINITIALIZED      = 0,
+	DY50_STATUS_IDLE               = 1,
+	DY50_STATUS_ENROLL_HANDLER     = 2,
+	DY50_STATUS_SEARCH_FINGERPRINT = 3,
 }DY50_Status_t;
 
 typedef struct
@@ -193,7 +199,10 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50);
 void DY50_EnrolResponseCallBack(DY50_Typedef_t *dy50, DY50_AckCode_t ackCode);
 
 DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t start_page_id, uint16_t page_num);
-DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50, uint16_t *id_found, uint8_t *math_score);
+DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50);
+void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, DY50_Search_Return_t search_return);
+
+void DY50_TaskHandler(DY50_Typedef_t *dy50);
 #endif /* DY50_DRIVER_FOR_STM32_INC_DY50_H_ */
 
 

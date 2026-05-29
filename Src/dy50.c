@@ -736,8 +736,11 @@ void DY50_FingerTouchInterrupt(DY50_Typedef_t *dy50)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return;
 
-	dy50->enroll.debouncing_init_time = HAL_GetTick();
-	dy50->touch_flag = 1;
+	if(dy50->touch_flag == 0)
+	{
+		dy50->enroll.debouncing_init_time = HAL_GetTick();
+		dy50->touch_flag = 1;
+	}
 }
 
 /*
@@ -896,40 +899,78 @@ DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, 
  *
  * @retval Returns whether the search was successful
  */
-DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50, uint16_t *id_found, uint8_t *math_score)
+DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
 	DY50_AckCode_t ack_code;
 
-	int16_t last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
+	if(dy50->touch_flag == 1)
+	{
 
-	if(last_id <= 0)
-	{
-		ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
-	}
-	else
-	{
-		ack_code = DY50_GenerateChar(dy50, DY50_BUFFER_ID_1);
-		if(ack_code == ACK_OK)
-		{
-			ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
-			if(ack_code == ACK_OK)
+			int16_t last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
+
+			if(last_id <= 0)
 			{
-				*id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
-				*id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
-
-				*math_score = dy50->buf_rx.packet.payload[3];
+				ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
 			}
-		}
+			else
+			{
+				ack_code = DY50_GenerateChar(dy50, DY50_BUFFER_ID_1);
+				if(ack_code == ACK_OK)
+				{
+					ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
+					if(ack_code == ACK_OK)
+					{
+						DY50_Search_Return_t search_return;
+
+						search_return.id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
+						search_return.id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
+
+						search_return.math_score = dy50->buf_rx.packet.payload[3];
+
+						DY50_SearchResponseCallBack(dy50, search_return);
+
+//							*id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
+//							*id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
+//
+//							*math_score = dy50->buf_rx.packet.payload[3];
+					}
+				}
+			}
+
 	}
-	if(ack_code != ACK_OK)
-	{
-		*id_found = 0xFFFF;
-	}
+
+	dy50->touch_flag = 0;
 
 	return ack_code;
+}
+
+__weak void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, DY50_Search_Return_t search_return)
+{
+
+}
+
+
+void DY50_TaskHandler(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return;
+
+	if(dy50->touch_flag == 1)
+	{
+		switch (dy50->status) {
+			case DY50_STATUS_ENROLL_HANDLER:
+				DY50_EnrollHandler(dy50);
+				break;
+			case DY50_STATUS_SEARCH_FINGERPRINT:
+				DY50_SearchFingerPrint(dy50);
+			default:
+				//dy50->touch_flag = 0;
+				break;
+		}
+	}
 }
 
 
