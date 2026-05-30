@@ -906,14 +906,21 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 	DY50_AckCode_t ack_code;
 
-	if(dy50->touch_flag == 1)
+	if((HAL_GetTick() - dy50->search_last_measuere_time) > 200)
 	{
+		dy50->search_last_measuere_time = HAL_GetTick();
 
+		if(HAL_GPIO_ReadPin(dy50->touch_gpio.port, dy50->touch_gpio.pin) == 0)
+		{
 			int16_t last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
+			uint8_t callback_is_valid = 0;
+
+			DY50_Search_Return_t search_return = {.id_found = 0xFFFF, .math_score = 0};
 
 			if(last_id <= 0)
 			{
 				ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
+				callback_is_valid = 1;
 			}
 			else
 			{
@@ -923,31 +930,31 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 					ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
 					if(ack_code == ACK_OK)
 					{
-						DY50_Search_Return_t search_return;
-
 						search_return.id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
 						search_return.id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
 
 						search_return.math_score = dy50->buf_rx.packet.payload[3];
 
-						DY50_SearchResponseCallBack(dy50, search_return);
-
-//							*id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
-//							*id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
-//
-//							*math_score = dy50->buf_rx.packet.payload[3];
+						callback_is_valid = 1;
 					}
+					else if(ack_code == ACK_ERROR_FINGERPRINT_NOT_FOUND)
+					{
+						callback_is_valid = 1;
+					}
+
 				}
 			}
-
+			if(callback_is_valid == 1)
+				DY50_SearchResponseCallBack(dy50, &search_return);
+		}
 	}
 
-	dy50->touch_flag = 0;
+	dy50->touch_flag = 0;	//We didn't use the flag, but it still needs to be reset to zero
 
 	return ack_code;
 }
 
-__weak void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, DY50_Search_Return_t search_return)
+__weak void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, const DY50_Search_Return_t *search_return)
 {
 
 }
@@ -958,19 +965,20 @@ void DY50_TaskHandler(DY50_Typedef_t *dy50)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return;
 
-	if(dy50->touch_flag == 1)
+
+	switch (dy50->status)
 	{
-		switch (dy50->status) {
-			case DY50_STATUS_ENROLL_HANDLER:
-				DY50_EnrollHandler(dy50);
-				break;
-			case DY50_STATUS_SEARCH_FINGERPRINT:
-				DY50_SearchFingerPrint(dy50);
-			default:
-				//dy50->touch_flag = 0;
-				break;
-		}
+		case DY50_STATUS_ENROLL_HANDLER:
+			DY50_EnrollHandler(dy50);
+			break;
+		case DY50_STATUS_SEARCH_FINGERPRINT:
+			DY50_SearchFingerPrint(dy50);
+			break;
+		default:
+			dy50->touch_flag = 0;
+			break;
 	}
+
 }
 
 

@@ -177,6 +177,7 @@ typedef struct
 	DY50_Buffer_t buf_rx;
 	DY50_Enroll_t enroll;
 	uint8_t touch_flag;
+	uint32_t search_last_measuere_time;
 }DY50_Typedef_t;
 
 DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *touch_gpio_port, uint16_t touch_gpio_pin);
@@ -200,7 +201,7 @@ void DY50_EnrolResponseCallBack(DY50_Typedef_t *dy50, DY50_AckCode_t ackCode);
 
 DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t start_page_id, uint16_t page_num);
 DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50);
-void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, DY50_Search_Return_t search_return);
+void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, const DY50_Search_Return_t *search_return);
 
 void DY50_TaskHandler(DY50_Typedef_t *dy50);
 #endif /* DY50_DRIVER_FOR_STM32_INC_DY50_H_ */
