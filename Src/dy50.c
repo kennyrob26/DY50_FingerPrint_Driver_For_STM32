@@ -904,54 +904,144 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	DY50_AckCode_t ack_code;
+	DY50_AckCode_t ack_code = ACK_OK;
 
-	if((HAL_GetTick() - dy50->search_last_measuere_time) > 200)
+	int16_t last_id;
+	uint8_t callback_is_valid = 1;
+	DY50_Search_Return_t search_return = {.id_found = 0xFFFF, .math_score = 0};
+
+	DY50_SearchState_t search_state = DY50_SEARCH_STATE_CHECK_TIME_AND_GPIO;
+
+	uint8_t state_machine_ok = 1;
+	while(state_machine_ok)
 	{
-		dy50->search_last_measuere_time = HAL_GetTick();
+		switch (search_state) {
+			case DY50_SEARCH_STATE_CHECK_TIME_AND_GPIO:
+				if((HAL_GetTick() - dy50->search_last_measuere_time) > SEARCH_MIN_TIME_BETWEEN_READING)
+				{
+					state_machine_ok = 0;
 
-		if(HAL_GPIO_ReadPin(dy50->touch_gpio.port, dy50->touch_gpio.pin) == 0)
-		{
-			int16_t last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
-			uint8_t callback_is_valid = 0;
+					dy50->search_last_measuere_time = HAL_GetTick();
+					if(HAL_GPIO_ReadPin(dy50->touch_gpio.port, dy50->touch_gpio.pin) == 0)
+					{
+						search_state = DY50_SEARCH_STATE_CHECK_LAST_ID_FILLED;
+						state_machine_ok = 1;
+					}
+					else
+						ack_code = ACK_ERROR;
+				}
+				else
+					ack_code = ACK_OK;	//There are no errors, just waiting
+				break;
 
-			DY50_Search_Return_t search_return = {.id_found = 0xFFFF, .math_score = 0};
-
-			if(last_id <= 0)
-			{
-				ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
+			case DY50_SEARCH_STATE_CHECK_LAST_ID_FILLED:
+				last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
 				callback_is_valid = 1;
-			}
-			else
-			{
+
+				if(last_id <= 0)
+				{
+					ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
+				}
+				else
+				{
+					ack_code = ACK_OK;
+					search_state = DY50_SEARCH_STATE_GENERATE_CHAR;
+				}
+
+				break;
+
+			case DY50_SEARCH_STATE_GENERATE_CHAR:
 				ack_code = DY50_GenerateChar(dy50, DY50_BUFFER_ID_1);
 				if(ack_code == ACK_OK)
 				{
-					ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
-					if(ack_code == ACK_OK)
-					{
-						search_return.id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
-						search_return.id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
+					state_machine_ok = 1;
+					search_state = DY50_SEARCH_STATE_CMD_SEARCH;
+				}
+				else
+				{
+					state_machine_ok = 0;
+					callback_is_valid = 0;
+				}
+				break;
 
-						search_return.math_score = dy50->buf_rx.packet.payload[3];
+			case DY50_SEARCH_STATE_CMD_SEARCH:
+				ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
+				if(ack_code == ACK_OK)
+				{
+					search_return.id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
+					search_return.id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
 
-						callback_is_valid = 1;
-					}
-					else if(ack_code == ACK_ERROR_FINGERPRINT_NOT_FOUND)
-					{
-						callback_is_valid = 1;
-					}
+					search_return.math_score = dy50->buf_rx.packet.payload[3];
 
 				}
-			}
-			if(callback_is_valid == 1)
-				DY50_SearchResponseCallBack(dy50, &search_return);
+				else if(ack_code != ACK_ERROR_FINGERPRINT_NOT_FOUND)
+				{
+					callback_is_valid = 0;
+				}
+
+				if(callback_is_valid)
+					DY50_SearchResponseCallBack(dy50, &search_return);
+
+				state_machine_ok = 0;
+
+				break;
+			default:
+				break;
 		}
 	}
 
 	dy50->touch_flag = 0;	//We didn't use the flag, but it still needs to be reset to zero
 
 	return ack_code;
+
+//	DY50_AckCode_t ack_code;
+//
+//	if((HAL_GetTick() - dy50->search_last_measuere_time) > 200)
+//	{
+//		dy50->search_last_measuere_time = HAL_GetTick();
+//
+//		if(HAL_GPIO_ReadPin(dy50->touch_gpio.port, dy50->touch_gpio.pin) == 0)
+//		{
+//			int16_t last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
+//			uint8_t callback_is_valid = 0;
+//
+//			DY50_Search_Return_t search_return = {.id_found = 0xFFFF, .math_score = 0};
+//
+//			if(last_id <= 0)
+//			{
+//				ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
+//				callback_is_valid = 1;
+//			}
+//			else
+//			{
+//				ack_code = DY50_GenerateChar(dy50, DY50_BUFFER_ID_1);
+//				if(ack_code == ACK_OK)
+//				{
+//					ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
+//					if(ack_code == ACK_OK)
+//					{
+//						search_return.id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
+//						search_return.id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
+//
+//						search_return.math_score = dy50->buf_rx.packet.payload[3];
+//
+//						callback_is_valid = 1;
+//					}
+//					else if(ack_code == ACK_ERROR_FINGERPRINT_NOT_FOUND)
+//					{
+//						callback_is_valid = 1;
+//					}
+//
+//				}
+//			}
+//			if(callback_is_valid == 1)
+//				DY50_SearchResponseCallBack(dy50, &search_return);
+//		}
+//	}
+//
+//	dy50->touch_flag = 0;	//We didn't use the flag, but it still needs to be reset to zero
+//
+//	return ack_code;
 }
 
 __weak void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, const DY50_Search_Return_t *search_return)
