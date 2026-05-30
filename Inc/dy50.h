@@ -14,6 +14,7 @@
 #define SWAP32(x) (((x) >> 24) | (((x) & 0x00FF0000) >> 8) | (((x) & 0x0000FF00) << 8) | ((x) << 24))
 
 #define PAYLOAD_TX_SIZE 34
+#define PAYLOAD_RX_SIZE 34
 
 #define DY50_HEADER  (uint16_t) SWAP16(0xEF01)
 #define DY50_ADDRESS (uint32_t) SWAP32(0xFFFFFFFF)
@@ -74,6 +75,8 @@ typedef enum
 
 	ACK_ERROR_FINGERPRINT_NOT_FOUND = 0x09,		//In Search Command
 
+	ACK_WATING_RESPONSE           = 242,
+
 	ACK_ERROR                     = 243,
 	ACK_ERROR_DY50_UNINITIALIZED  = 244,
 	ACK_ERROR_TABLE_ID_IS_FULL    = 245,
@@ -130,11 +133,12 @@ typedef enum
 
 typedef enum
 {
+	DY50_SEARCH_STATE_IDLE,
 	DY50_SEARCH_STATE_CHECK_TIME_AND_GPIO,
-	DY50_SEARCH_STATE_CHECK_LAST_ID_FILLED,
 	DY50_SEARCH_STATE_GENERATE_CHAR,
 	DY50_SEARCH_STATE_CMD_SEARCH,
-
+	DY50_SEARCH_STATE_WAITING_RESPONSE,
+	DY50_SEARCH_STATE_COMPLETED,
 
 }DY50_SearchState_t;
 
@@ -180,12 +184,22 @@ typedef enum
 
 typedef struct
 {
+	uint8_t dma_flag;
+	DY50_Buffer_t buf_tx;
+	uint8_t tx_len;
+	DY50_Buffer_t buf_rx;
+	uint8_t rx_len;
+}DY50_UART_Info_t;
+
+typedef struct
+{
 	UART_HandleTypeDef *huart;
 	DY50_Status_t status;
 	DY50_Info_t info;
 	DY50_Gpio_t touch_gpio;
-	DY50_Buffer_t buf_tx;
-	DY50_Buffer_t buf_rx;
+	//DY50_Buffer_t buf_tx;
+	//DY50_Buffer_t buf_rx;
+	DY50_UART_Info_t uart;
 	DY50_Enroll_t enroll;
 	uint8_t touch_flag;
 	uint32_t search_last_measuere_time;

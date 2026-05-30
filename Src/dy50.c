@@ -14,6 +14,36 @@
 
 uint8_t response;
 
+
+DY50_Typedef_t *dy50_global; //Temporary for test
+
+
+//void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+	if (huart == dy50_global->huart)
+	{
+		//dy50_global->
+		dy50_global->uart.dma_flag = 1;
+		//HAL_UARTEx_ReceiveToIdle_DMA(dy50_global->huart, dy50_global->uart.buf_rx.raw, PAYLOAD_RX_SIZE + 9);
+	}
+
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+    if (huart == dy50_global->huart)
+    {
+        __HAL_UART_CLEAR_FEFLAG(dy50_global->huart);
+        __HAL_UART_CLEAR_NEFLAG(dy50_global->huart);
+        __HAL_UART_CLEAR_OREFLAG(dy50_global->huart);
+
+        //HAL_UARTEx_ReceiveToIdle_DMA(dy50_global->huart, dy50_global->uart.buf_rx.raw, PAYLOAD_RX_SIZE + 9);
+    }
+}
+
+
+
 /**
  * @brief DY50 Initialization function
  *
@@ -34,6 +64,7 @@ DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_
 	if(dy50->status != DY50_STATUS_UNINITIALIZED)			//already initialized
 		return ACK_OK;
 
+
 	DY50_AckCode_t code_return = ACK_OK;
 	DY50_Init_State_Machine init_status;
 
@@ -43,13 +74,16 @@ DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_
 		{
 			case DY50_INIT_DEFINE_PARAMS:
 				dy50->huart = huart;
-				dy50->buf_tx.packet.header      = DY50_HEADER;
-				dy50->buf_tx.packet.chip_adress = DY50_ADDRESS;
+				dy50->uart.buf_tx.packet.header      = DY50_HEADER;
+				dy50->uart.buf_tx.packet.chip_adress = DY50_ADDRESS;
 
 				dy50->touch_gpio.port = touch_gpio_port;
 				dy50->touch_gpio.pin  = touch_gpio_pin;
 
 				dy50->status = DY50_STATUS_IDLE;  //For uses readsystem and verify password functions
+
+				dy50_global = dy50;
+				//HAL_UARTEx_ReceiveToIdle_DMA(dy50->huart, dy50->uart.buf_rx.raw, PAYLOAD_RX_SIZE);
 
 				code_return = ACK_OK;
 				init_status = DY50_INIT_READ_SYSTEM_PARAMS;
@@ -133,6 +167,73 @@ static inline void DY50_CalcCheckSum(DY50_packet_t *packet, uint16_t payload_len
 }
 
 
+DY50_AckCode_t DY50_SendCommand_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	dy50->uart.buf_tx.packet.header      = DY50_HEADER;
+	dy50->uart.buf_tx.packet.chip_adress = DY50_ADDRESS;
+	dy50->uart.buf_tx.packet.flag        = DY50_FLAG_COMMAND;
+	dy50->uart.buf_tx.packet.code        = cmd;
+
+	const uint8_t code_len     = 1;
+	const uint8_t checksum_len = 2;
+	uint8_t packet_length = code_len + tx_payload_len + checksum_len;
+
+	dy50->uart.buf_tx.packet.length  = SWAP16(packet_length);
+
+	DY50_CalcCheckSum(&dy50->uart.buf_tx.packet, tx_payload_len);
+
+	const uint8_t size_fix_bytes = 9; //header + address + flag + length
+	uint16_t size_total_bytes = size_fix_bytes + packet_length;
+
+	dy50->uart.dma_flag = 0;
+	__HAL_UART_CLEAR_OREFLAG(dy50->huart);
+
+	HAL_UART_Receive_DMA(dy50->huart, dy50->uart.buf_rx.raw, (ACK_PACKET_SIZE + rx_payload_len));
+
+	if(HAL_UART_Transmit(dy50->huart, dy50->uart.buf_tx.raw, size_total_bytes, 100) != HAL_OK)
+		return ACK_ERROR_UART_TX;
+
+	return ACK_OK;
+}
+
+DY50_AckCode_t DY50_Wait_Command_Response(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if(dy50->uart.dma_flag == 1)
+	{
+		if(DY50_PacketAckIsValid(&dy50->uart.buf_rx.packet))
+		{
+			return dy50->uart.buf_rx.packet.code;
+		}
+
+		dy50->uart.dma_flag = 0;
+		return ACK_ERROR_RESPONSE;
+	}
+
+	return ACK_WATING_RESPONSE;
+}
+
+DY50_AckCode_t DY50_Wait_Command_Response_Block(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	DY50_AckCode_t ack_response = DY50_Wait_Command_Response(dy50);
+	while(ack_response == ACK_WATING_RESPONSE)
+	{
+		ack_response = DY50_Wait_Command_Response(dy50);
+		//Block code waiting response
+	}
+
+	return ack_response;
+
+}
+
 /*
  * @brief The command sending function
  *
@@ -157,35 +258,38 @@ DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint1
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	dy50->buf_tx.packet.header      = DY50_HEADER;
-	dy50->buf_tx.packet.chip_adress = DY50_ADDRESS;
-	dy50->buf_tx.packet.flag        = DY50_FLAG_COMMAND;
-	dy50->buf_tx.packet.code        = cmd;
+	DY50_SendCommand_DMA(dy50, cmd, tx_payload_len, rx_payload_len);
+	return DY50_Wait_Command_Response_Block(dy50);
 
-	const uint8_t code_len     = 1;
-	const uint8_t checksum_len = 2;
-	uint8_t packet_length = code_len + tx_payload_len + checksum_len;
-
-	dy50->buf_tx.packet.length  = SWAP16(packet_length);
-
-	DY50_CalcCheckSum(&dy50->buf_tx.packet, tx_payload_len);
-
-	const uint8_t size_fix_bytes = 9; //header + address + flag + length
-	uint16_t size_total_bytes = size_fix_bytes + packet_length;
-
-	if(HAL_UART_Transmit(dy50->huart, dy50->buf_tx.raw, size_total_bytes, 100) != HAL_OK)
-		return ACK_ERROR_UART_TX;
-
-	if(HAL_UART_Receive(dy50->huart, dy50->buf_rx.raw, (ACK_PACKET_SIZE + rx_payload_len), 500) != HAL_OK)
-		return ACK_ERROR_UART_RX;
-
-
-	if(DY50_PacketAckIsValid(&dy50->buf_rx.packet))
-	{
-		return dy50->buf_rx.packet.code;
-	}
-
-	return ACK_ERROR_RESPONSE;
+//	dy50->uart.buf_tx.packet.header      = DY50_HEADER;
+//	dy50->uart.buf_tx.packet.chip_adress = DY50_ADDRESS;
+//	dy50->uart.buf_tx.packet.flag        = DY50_FLAG_COMMAND;
+//	dy50->uart.buf_tx.packet.code        = cmd;
+//
+//	const uint8_t code_len     = 1;
+//	const uint8_t checksum_len = 2;
+//	uint8_t packet_length = code_len + tx_payload_len + checksum_len;
+//
+//	dy50->uart.buf_tx.packet.length  = SWAP16(packet_length);
+//
+//	DY50_CalcCheckSum(&dy50->uart.buf_tx.packet, tx_payload_len);
+//
+//	const uint8_t size_fix_bytes = 9; //header + address + flag + length
+//	uint16_t size_total_bytes = size_fix_bytes + packet_length;
+//
+//	if(HAL_UART_Transmit(dy50->huart, dy50->uart.buf_tx.raw, size_total_bytes, 100) != HAL_OK)
+//		return ACK_ERROR_UART_TX;
+//
+//	if(HAL_UART_Receive(dy50->huart, dy50->uart.buf_rx.raw, (ACK_PACKET_SIZE + rx_payload_len), 500) != HAL_OK)
+//		return ACK_ERROR_UART_RX;
+//
+//
+//	if(DY50_PacketAckIsValid(&dy50->uart.buf_rx.packet))
+//	{
+//		return dy50->uart.buf_rx.packet.code;
+//	}
+//
+//	return ACK_ERROR_RESPONSE;
 
 }
 
@@ -209,14 +313,14 @@ DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50)
 
 	if(ack_code == ACK_OK)
 	{
-		dy50->info.database_capacity = ((uint16_t)dy50->buf_rx.packet.payload[4] << 8);
-		dy50->info.database_capacity |= ((uint16_t)dy50->buf_rx.packet.payload[5] & 0x00FF);
+		dy50->info.database_capacity = ((uint16_t)dy50->uart.buf_rx.packet.payload[4] << 8);
+		dy50->info.database_capacity |= ((uint16_t)dy50->uart.buf_rx.packet.payload[5] & 0x00FF);
 
-		dy50->info.security_level = dy50->buf_rx.packet.payload[7];
+		dy50->info.security_level = dy50->uart.buf_rx.packet.payload[7];
 
-		dy50->info.packet_size = dy50->buf_rx.packet.payload[13]; //0->32, 1->64, 2->128, 3->256
+		dy50->info.packet_size = dy50->uart.buf_rx.packet.payload[13]; //0->32, 1->64, 2->128, 3->256
 
-		dy50->info.baund_rate  = dy50->buf_rx.packet.payload[15]; //baundrate x 9600
+		dy50->info.baund_rate  = dy50->uart.buf_rx.packet.payload[15]; //baundrate x 9600
 
 	}
 
@@ -236,10 +340,10 @@ DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	dy50->buf_tx.packet.payload[0] = (uint8_t)((password >> 24) & 0x000000FF);
-	dy50->buf_tx.packet.payload[1] = (uint8_t)((password >> 16) & 0x000000FF);
-	dy50->buf_tx.packet.payload[2] = (uint8_t)((password >> 8)  & 0x000000FF);
-	dy50->buf_tx.packet.payload[3] = (uint8_t)(password  & 0x000000FF);
+	dy50->uart.buf_tx.packet.payload[0] = (uint8_t)((password >> 24) & 0x000000FF);
+	dy50->uart.buf_tx.packet.payload[1] = (uint8_t)((password >> 16) & 0x000000FF);
+	dy50->uart.buf_tx.packet.payload[2] = (uint8_t)((password >> 8)  & 0x000000FF);
+	dy50->uart.buf_tx.packet.payload[3] = (uint8_t)(password  & 0x000000FF);
 
 	return DY50_SendCommand(dy50, DY50_CMD_VERIFY_PASSWORD, 4, PACKET_NOT_PAYLOAD);
 }
@@ -425,28 +529,28 @@ DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTa
 	DY50_AckCode_t code_ack;
 
 	//Get page 0
-	dy50->buf_tx.packet.payload[0] = 0x00;
+	dy50->uart.buf_tx.packet.payload[0] = 0x00;
 	code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size);
 
 	if(size >= page_size)
-		memcpy(readIndexTable, dy50->buf_rx.packet.payload, page_size);
+		memcpy(readIndexTable, dy50->uart.buf_rx.packet.payload, page_size);
 	else
-		memcpy(readIndexTable, dy50->buf_rx.packet.payload, size);
+		memcpy(readIndexTable, dy50->uart.buf_rx.packet.payload, size);
 
 	//Get page 1 (if indexs>256)
 	if((code_ack == ACK_OK) && (dy50->info.database_capacity > 256))
 	{
 		if(size > page_size)
 		{
-			dy50->buf_tx.packet.payload[0] = 0x01;
+			dy50->uart.buf_tx.packet.payload[0] = 0x01;
 			code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size);
 
 			uint8_t remaining_bytes = (size - 32);
 
 			if(remaining_bytes >= page_size)
-				memcpy(&readIndexTable[32], dy50->buf_rx.packet.payload, page_size);
+				memcpy(&readIndexTable[32], dy50->uart.buf_rx.packet.payload, page_size);
 			else
-				memcpy(&readIndexTable[32], dy50->buf_rx.packet.payload, remaining_bytes);
+				memcpy(&readIndexTable[32], dy50->uart.buf_rx.packet.payload, remaining_bytes);
 		}
 	}
 
@@ -479,7 +583,7 @@ DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id
 	if((buffer_id < DY50_BUFFER_ID_1) && (buffer_id > DY50_BUFFER_ID_4))
 		return ACK_ERROR_INVALID_PARAMETER;
 
-	dy50->buf_tx.packet.payload[0] = buffer_id;
+	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
 
 	return(DY50_SendCommand(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD));
 }
@@ -558,9 +662,9 @@ DY50_AckCode_t DY50_CMD_StoreChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_i
 
 	DY50_AckCode_t ack_code;
 
-	dy50->buf_tx.packet.payload[0] = buffer_id;
-	dy50->buf_tx.packet.payload[1] = (uint8_t)((page_id >> 8) & 0x00FF);
-	dy50->buf_tx.packet.payload[2] = (uint8_t)(page_id & 0x00FF);
+	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
+	dy50->uart.buf_tx.packet.payload[1] = (uint8_t)((page_id >> 8) & 0x00FF);
+	dy50->uart.buf_tx.packet.payload[2] = (uint8_t)(page_id & 0x00FF);
 
 	ack_code = DY50_SendCommand(dy50, DY50_CMD_STORE_CHAR, 3, PACKET_NOT_PAYLOAD);
 
@@ -876,11 +980,11 @@ DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, 
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	dy50->buf_tx.packet.payload[0] = buffer_id;
-	dy50->buf_tx.packet.payload[1] = (uint8_t)((start_page_id >> 8) & 0x00FF);
-	dy50->buf_tx.packet.payload[2] = (uint8_t)(start_page_id & 0x00FF);
-	dy50->buf_tx.packet.payload[3] = (uint8_t)((page_num >> 8) & 0x00FF);
-	dy50->buf_tx.packet.payload[4] = (uint8_t)(page_num & 0x00FF);
+	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
+	dy50->uart.buf_tx.packet.payload[1] = (uint8_t)((start_page_id >> 8) & 0x00FF);
+	dy50->uart.buf_tx.packet.payload[2] = (uint8_t)(start_page_id & 0x00FF);
+	dy50->uart.buf_tx.packet.payload[3] = (uint8_t)((page_num >> 8) & 0x00FF);
+	dy50->uart.buf_tx.packet.payload[4] = (uint8_t)(page_num & 0x00FF);
 
 	const uint8_t payload_tx_len = 5,
 		          payload_rx_len = 4;
@@ -924,7 +1028,7 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 					dy50->search_last_measuere_time = HAL_GetTick();
 					if(HAL_GPIO_ReadPin(dy50->touch_gpio.port, dy50->touch_gpio.pin) == 0)
 					{
-						search_state = DY50_SEARCH_STATE_CHECK_LAST_ID_FILLED;
+						search_state = DY50_SEARCH_STATE_GENERATE_CHAR;
 						state_machine_ok = 1;
 					}
 					else
@@ -934,7 +1038,7 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 					ack_code = ACK_OK;	//There are no errors, just waiting
 				break;
 
-			case DY50_SEARCH_STATE_CHECK_LAST_ID_FILLED:
+			case DY50_SEARCH_STATE_GENERATE_CHAR:
 				last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
 				callback_is_valid = 1;
 
@@ -944,23 +1048,17 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 				}
 				else
 				{
-					ack_code = ACK_OK;
-					search_state = DY50_SEARCH_STATE_GENERATE_CHAR;
-				}
-
-				break;
-
-			case DY50_SEARCH_STATE_GENERATE_CHAR:
-				ack_code = DY50_GenerateChar(dy50, DY50_BUFFER_ID_1);
-				if(ack_code == ACK_OK)
-				{
-					state_machine_ok = 1;
-					search_state = DY50_SEARCH_STATE_CMD_SEARCH;
-				}
-				else
-				{
-					state_machine_ok = 0;
-					callback_is_valid = 0;
+					ack_code = DY50_GenerateChar(dy50, DY50_BUFFER_ID_1);
+					if(ack_code == ACK_OK)
+					{
+						state_machine_ok = 1;
+						search_state = DY50_SEARCH_STATE_CMD_SEARCH;
+					}
+					else
+					{
+						state_machine_ok = 0;
+						callback_is_valid = 0;
+					}
 				}
 				break;
 
@@ -968,10 +1066,10 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 				ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
 				if(ack_code == ACK_OK)
 				{
-					search_return.id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
-					search_return.id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
+					search_return.id_found =  ((uint16_t)dy50->uart.buf_rx.packet.payload[0]) << 8;
+					search_return.id_found |= (((uint16_t)dy50->uart.buf_rx.packet.payload[1]) & 0x00FF);
 
-					search_return.math_score = dy50->buf_rx.packet.payload[3];
+					search_return.math_score = dy50->uart.buf_rx.packet.payload[3];
 
 				}
 				else if(ack_code != ACK_ERROR_FINGERPRINT_NOT_FOUND)
@@ -994,54 +1092,6 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 	return ack_code;
 
-//	DY50_AckCode_t ack_code;
-//
-//	if((HAL_GetTick() - dy50->search_last_measuere_time) > 200)
-//	{
-//		dy50->search_last_measuere_time = HAL_GetTick();
-//
-//		if(HAL_GPIO_ReadPin(dy50->touch_gpio.port, dy50->touch_gpio.pin) == 0)
-//		{
-//			int16_t last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
-//			uint8_t callback_is_valid = 0;
-//
-//			DY50_Search_Return_t search_return = {.id_found = 0xFFFF, .math_score = 0};
-//
-//			if(last_id <= 0)
-//			{
-//				ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
-//				callback_is_valid = 1;
-//			}
-//			else
-//			{
-//				ack_code = DY50_GenerateChar(dy50, DY50_BUFFER_ID_1);
-//				if(ack_code == ACK_OK)
-//				{
-//					ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
-//					if(ack_code == ACK_OK)
-//					{
-//						search_return.id_found =  ((uint16_t)dy50->buf_rx.packet.payload[0]) << 8;
-//						search_return.id_found |= (((uint16_t)dy50->buf_rx.packet.payload[1]) & 0x00FF);
-//
-//						search_return.math_score = dy50->buf_rx.packet.payload[3];
-//
-//						callback_is_valid = 1;
-//					}
-//					else if(ack_code == ACK_ERROR_FINGERPRINT_NOT_FOUND)
-//					{
-//						callback_is_valid = 1;
-//					}
-//
-//				}
-//			}
-//			if(callback_is_valid == 1)
-//				DY50_SearchResponseCallBack(dy50, &search_return);
-//		}
-//	}
-//
-//	dy50->touch_flag = 0;	//We didn't use the flag, but it still needs to be reset to zero
-//
-//	return ack_code;
 }
 
 __weak void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, const DY50_Search_Return_t *search_return)
