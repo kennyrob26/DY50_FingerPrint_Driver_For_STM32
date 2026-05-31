@@ -134,8 +134,6 @@ typedef enum
 typedef enum
 {
 	DY50_SEARCH_STATE_IDLE,
-	DY50_SEARCH_STATE_CHECK_TIME_AND_GPIO,
-	DY50_SEARCH_STATE_GENERATE_CHAR,
 	DY50_SEARCH_STATE_CMD_SEARCH,
 	DY50_SEARCH_STATE_WAITING_RESPONSE,
 	DY50_SEARCH_STATE_COMPLETED,
@@ -197,11 +195,11 @@ typedef struct
 	DY50_Status_t status;
 	DY50_Info_t info;
 	DY50_Gpio_t touch_gpio;
-	//DY50_Buffer_t buf_tx;
-	//DY50_Buffer_t buf_rx;
+
 	DY50_UART_Info_t uart;
 	DY50_Enroll_t enroll;
 	uint8_t touch_flag;
+	DY50_SearchState_t search_state;
 	uint32_t search_last_measuere_time;
 }DY50_Typedef_t;
 
