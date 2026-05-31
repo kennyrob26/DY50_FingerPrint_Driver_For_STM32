@@ -147,6 +147,20 @@ typedef enum
 	DY50_FINGER_NOT_IN_TOUCH          = 2
 }DY50_FingerTouchState_t;
 
+typedef struct
+{
+	DY50_Gpio_t gpio;
+	uint8_t flag;
+}DY50_Touch_Info_t;
+
+typedef struct
+{
+	uint8_t dma_flag;
+	DY50_Buffer_t buf_tx;
+	uint8_t tx_len;
+	DY50_Buffer_t buf_rx;
+	uint8_t rx_len;
+}DY50_UART_Info_t;
 
 typedef struct
 {
@@ -155,6 +169,12 @@ typedef struct
 	uint32_t debouncing_init_time;
 	int16_t table_id;
 }DY50_Enroll_t;
+
+typedef struct
+{
+	DY50_SearchState_t state;
+	uint32_t last_measuere_time;
+}DY50_Search_t;
 
 typedef struct
 {
@@ -182,25 +202,25 @@ typedef enum
 
 typedef struct
 {
-	uint8_t dma_flag;
-	DY50_Buffer_t buf_tx;
-	uint8_t tx_len;
-	DY50_Buffer_t buf_rx;
-	uint8_t rx_len;
-}DY50_UART_Info_t;
-
-typedef struct
-{
 	UART_HandleTypeDef *huart;
 	DY50_Status_t status;
 	DY50_Info_t info;
-	DY50_Gpio_t touch_gpio;
+
+
+	//DY50_Gpio_t touch_gpio;
+	//uint8_t touch_flag;
+
+	DY50_Touch_Info_t touch;
 
 	DY50_UART_Info_t uart;
 	DY50_Enroll_t enroll;
-	uint8_t touch_flag;
-	DY50_SearchState_t search_state;
-	uint32_t search_last_measuere_time;
+	DY50_Search_t search;
+
+
+
+
+	//DY50_SearchState_t search_state;
+	//uint32_t search_last_measuere_time;
 }DY50_Typedef_t;
 
 DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *touch_gpio_port, uint16_t touch_gpio_pin);

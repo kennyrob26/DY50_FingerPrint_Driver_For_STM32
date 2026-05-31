@@ -77,8 +77,8 @@ DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_
 				dy50->uart.buf_tx.packet.header      = DY50_HEADER;
 				dy50->uart.buf_tx.packet.chip_adress = DY50_ADDRESS;
 
-				dy50->touch_gpio.port = touch_gpio_port;
-				dy50->touch_gpio.pin  = touch_gpio_pin;
+				dy50->touch.gpio.port = touch_gpio_port;
+				dy50->touch.gpio.pin  = touch_gpio_pin;
 
 				dy50->status = DY50_STATUS_IDLE;  //For uses readsystem and verify password functions
 
@@ -725,7 +725,7 @@ DY50_FingerTouchState_t DY50_FingerIsOnTouch(DY50_Typedef_t *dy50)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	uint8_t touch_state = HAL_GPIO_ReadPin(dy50->touch_gpio.port, dy50->touch_gpio.pin);
+	uint8_t touch_state = HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin);
 
 	if(touch_state == 0) //Exist fingfer
 	{
@@ -844,10 +844,10 @@ void DY50_FingerTouchInterrupt(DY50_Typedef_t *dy50)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return;
 
-	if(dy50->touch_flag == 0)
+	if(dy50->touch.flag == 0)
 	{
 		dy50->enroll.debouncing_init_time = HAL_GetTick();
-		dy50->touch_flag = 1;
+		dy50->touch.flag = 1;
 	}
 }
 
@@ -865,7 +865,7 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return;
 
-	if(dy50->touch_flag == 1)
+	if(dy50->touch.flag == 1)
 	{
 		DY50_FingerTouchState_t finger_state = DY50_FingerIsOnTouch(dy50);
 
@@ -895,14 +895,14 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50)
 				if(dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE)
 					dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
 
-				dy50->touch_flag = 0;
+				dy50->touch.flag = 0;
 
 				break;
 			case DY50_FINGER_IN_TOUCH_WAITING_TIME:
 				//Waiting a debounce time
 				break;
 			case DY50_FINGER_NOT_IN_TOUCH:
-				dy50->touch_flag = 0;
+				dy50->touch.flag = 0;
 				break;
 			default:
 				break;
@@ -1014,14 +1014,14 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 	DY50_AckCode_t ack_code = ACK_OK;
 
-	switch (dy50->search_state)
+	switch (dy50->search.state)
 	{
 		case DY50_SEARCH_STATE_IDLE:
 
-			if((HAL_GetTick() - dy50->search_last_measuere_time) > SEARCH_MIN_TIME_BETWEEN_READING)
+			if((HAL_GetTick() - dy50->search.last_measuere_time) > SEARCH_MIN_TIME_BETWEEN_READING)
 			{
-				dy50->search_last_measuere_time = HAL_GetTick();
-				dy50->search_state = DY50_SEARCH_STATE_CMD_SEARCH;
+				dy50->search.last_measuere_time = HAL_GetTick();
+				dy50->search.state = DY50_SEARCH_STATE_CMD_SEARCH;
 			}
 			else
 				ack_code = ACK_OK;	//There are no errors, just waiting
@@ -1029,7 +1029,7 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 		case DY50_SEARCH_STATE_CMD_SEARCH:
 
-			if(HAL_GPIO_ReadPin(dy50->touch_gpio.port, dy50->touch_gpio.pin) == 0)
+			if(HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin) == 0)
 			{
 				int16_t last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
 
@@ -1044,16 +1044,19 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 					{
 						ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
 						if(ack_code == ACK_OK)
-							dy50->search_state = DY50_SEARCH_STATE_WAITING_RESPONSE;
+							dy50->search.state = DY50_SEARCH_STATE_WAITING_RESPONSE;
 					}
 					else
 					{
-						dy50->search_state = DY50_SEARCH_STATE_IDLE;
+						dy50->search.state = DY50_SEARCH_STATE_IDLE;
 					}
 				}
 			}
 			else
+			{
+				dy50->search.state = DY50_SEARCH_STATE_IDLE;
 				ack_code = ACK_ERROR;
+			}
 
 			break;
 
@@ -1061,7 +1064,7 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 			uint8_t callback_is_valid = 1;
 			DY50_Search_Return_t search_return = {.id_found = 0xFFFF, .math_score = 0};
-			dy50->search_state = DY50_SEARCH_STATE_COMPLETED;    //It only remains complete if it is not expecting a response
+			dy50->search.state = DY50_SEARCH_STATE_COMPLETED;    //It only remains complete if it is not expecting a response
 
 			ack_code = DY50_Wait_Command_Response(dy50);
 
@@ -1069,7 +1072,7 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 			{
 				case ACK_WATING_RESPONSE:
 
-					dy50->search_state = DY50_SEARCH_STATE_WAITING_RESPONSE;
+					dy50->search.state = DY50_SEARCH_STATE_WAITING_RESPONSE;
 					callback_is_valid = 0;
 					break;
 
@@ -1086,9 +1089,11 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 				case ACK_ERROR_FINGERPRINT_NOT_FOUND:
 
 					callback_is_valid = 1;
+					break;
 
 				default:
 					callback_is_valid = 0;
+					dy50->search.state = DY50_SEARCH_STATE_IDLE;
 					break;
 			}
 
@@ -1100,10 +1105,10 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 			break;
 	}
 
-	if(dy50->search_state == DY50_SEARCH_STATE_COMPLETED)
-		dy50->search_state = DY50_SEARCH_STATE_IDLE;
+	if(dy50->search.state == DY50_SEARCH_STATE_COMPLETED)
+		dy50->search.state = DY50_SEARCH_STATE_IDLE;
 
-	dy50->touch_flag = 0;	//We didn't use the flag, but it still needs to be reset to zero
+	dy50->touch.flag = 0;	//We didn't use the flag, but it still needs to be reset to zero
 
 	return ack_code;
 
@@ -1130,7 +1135,7 @@ void DY50_TaskHandler(DY50_Typedef_t *dy50)
 			DY50_SearchFingerPrint(dy50);
 			break;
 		default:
-			dy50->touch_flag = 0;
+			dy50->touch.flag = 0;
 			break;
 	}
 
