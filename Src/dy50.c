@@ -297,6 +297,56 @@ DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint1
 
 }
 
+DY50_AckCode_t DY50_SendCommandResponse_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	DY50_AckCode_t ack_code;
+
+	switch (dy50->cmd_dma_status)
+	{
+		case DY50_CMD_DMA_STATUS_IDLE:
+		case DY50_CMD_DMA_STATUS_SEND:
+
+			dy50->uart.dma_flag = 0;
+
+			ack_code = DY50_SendCommand_DMA(dy50, cmd, tx_payload_len, rx_payload_len);
+
+			if(ack_code == ACK_OK)
+			{
+				dy50->cmd_dma_status = DY50_CMD_DMA_STATUS_WAITING;
+				ack_code = ACK_WATING_RESPONSE;
+			}
+			else
+				dy50->cmd_dma_status = DY50_CMD_DMA_STATUS_IDLE;
+			break;
+
+		case DY50_CMD_DMA_STATUS_WAITING:
+
+			ack_code = DY50_Wait_Command_Response(dy50);
+
+			switch (ack_code)
+			{
+				case ACK_WATING_RESPONSE:
+					dy50->cmd_dma_status = DY50_CMD_DMA_STATUS_WAITING;
+					break;
+				case ACK_OK:
+					dy50->cmd_dma_status = DY50_CMD_DMA_STATUS_IDLE;
+					break;
+				default:
+					dy50->cmd_dma_status = DY50_CMD_DMA_STATUS_IDLE;
+					break;
+			}
+
+			break;
+		default:
+			break;
+	}
+
+	return ack_code;
+}
+
 /*
  * @brief Reads and Stores system parameters
  *
@@ -579,6 +629,16 @@ DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50)
 	return DY50_SendCommand(dy50, DY50_CMD_GET_IMAGE, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD);
 }
 
+DY50_AckCode_t DY50_CMD_GetImageDMA(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_GET_IMAGE, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD);
+}
+
+
+
 DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
@@ -591,6 +651,20 @@ DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id
 
 	return(DY50_SendCommand(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD));
 }
+
+DY50_AckCode_t DY50_CMD_GenCharDMA(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if((buffer_id < DY50_BUFFER_ID_1) && (buffer_id > DY50_BUFFER_ID_4))
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
+
+	return(DY50_SendCommandResponse_DMA(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD));
+}
+
 
 /*
  * @brief Command Generate Char (0x02)
@@ -621,6 +695,57 @@ DY50_AckCode_t DY50_GenerateChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id
 	if(code == ACK_OK)
 	{
 		code = DY50_CMD_GenChar(dy50, buffer_id);
+	}
+
+	return code;
+}
+
+
+
+DY50_AckCode_t DY50_GenerateCharDMA(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	DY50_AckCode_t code = ACK_WATING_RESPONSE;
+
+	switch (dy50->genchar_status)
+	{
+		case DY50_GENCHAR_STATUS_IDLE:
+			dy50->genchar_status = DY50_GENCHAR_STATUS_GET_IMAGE;
+		case DY50_GENCHAR_STATUS_GET_IMAGE:
+
+			code = DY50_CMD_GetImageDMA(dy50);
+
+			if(code == ACK_OK)
+			{
+				dy50->genchar_status = DY50_GENCHAR_STATUS_GEN_CHAR;
+				code = ACK_WATING_RESPONSE;
+			}
+			else if(code != ACK_WATING_RESPONSE)
+			{
+				dy50->genchar_status = DY50_GENCHAR_STATUS_IDLE;
+			}
+
+			break;
+
+		case DY50_GENCHAR_STATUS_GEN_CHAR:
+
+			code = DY50_CMD_GenCharDMA(dy50, buffer_id);
+
+			if(code == ACK_OK)
+			{
+				dy50->genchar_status = DY50_GENCHAR_STATUS_IDLE;
+			}
+			else if(code != ACK_WATING_RESPONSE)
+			{
+				dy50->genchar_status = DY50_GENCHAR_STATUS_IDLE;
+			}
+
+			break;
+		default:
+			dy50->genchar_status = DY50_GENCHAR_STATUS_IDLE;
+			break;
 	}
 
 	return code;
@@ -804,12 +929,17 @@ DY50_AckCode_t DY50_Enroll(DY50_Typedef_t *dy50)
 				break;
 		}
 
-		ack_code = DY50_GenerateChar(dy50, buffer_id);
+		//ack_code = DY50_GenerateChar(dy50, buffer_id);
+		ack_code = DY50_GenerateCharDMA(dy50, buffer_id);
 		if(ack_code == ACK_OK)
 		{
 			dy50->enroll.last_measure_time = HAL_GetTick();
 		}
-		else if(checkIfBadImageError(ack_code))
+		else if(ack_code == ACK_WATING_RESPONSE)
+		{
+			dy50->enroll.last_state--;   //Repeat current state, waiting response
+		}
+		else if( checkIfBadImageError(ack_code))
 		{
 			dy50->enroll.last_state--;   //Repeat current state
 			dy50->enroll.last_measure_time = HAL_GetTick();
@@ -867,35 +997,57 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50)
 
 	if(dy50->touch.flag == 1)
 	{
-		DY50_FingerTouchState_t finger_state = DY50_FingerIsOnTouch(dy50);
-
+		DY50_FingerTouchState_t finger_state;
+		if(dy50->enroll.handler_state == DY50_ENROLL_HANDLER_STATE_IDLE)
+		{
+			finger_state = DY50_FingerIsOnTouch(dy50);
+			if(finger_state == DY50_FINGER_IN_TOUCH_ACCEPTED)
+				dy50->enroll.handler_state = DY50_ENROLL_HANDLER_STATE_INITIALIZED;
+		}
+		else
+			finger_state = HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin);
 
 		switch (finger_state) {
 			case DY50_FINGER_IN_TOUCH_ACCEPTED:
 				DY50_AckCode_t ackCodeEnroll = DY50_Enroll(dy50);
 
-				if((ackCodeEnroll == ACK_OK) && (dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE))
+				if(ackCodeEnroll == ACK_WATING_RESPONSE)
 				{
-					ackCodeEnroll = DY50_CMD_RegModel(dy50);
-					if(ackCodeEnroll == ACK_OK)
-					{
-						ackCodeEnroll = DY50_CMD_StoreChar(dy50, DY50_BUFFER_ID_1, dy50->enroll.table_id);
-
-						if(ackCodeEnroll != ACK_OK)
-							dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;  //StoreChar Error
-					}
-					else
-					{
-					  dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;			//RegModel Error
-					}
+					return;
 				}
+				else
+				{
 
-				DY50_EnrolResponseCallBack(dy50, ackCodeEnroll);
+					if((ackCodeEnroll == ACK_OK) && (dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE))
+					{
+						ackCodeEnroll = DY50_CMD_RegModel(dy50);
+						if(ackCodeEnroll == ACK_OK)
+						{
+							ackCodeEnroll = DY50_CMD_StoreChar(dy50, DY50_BUFFER_ID_1, dy50->enroll.table_id);
 
-				if(dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE)
-					dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
+							if(ackCodeEnroll != ACK_OK)
+							{
+								dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;  //StoreChar Error
+								dy50->enroll.handler_state = DY50_ENROLL_HANDLER_STATE_IDLE;
+							}
+						}
+						else
+						{
+						  dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;			//RegModel Error
+						  dy50->enroll.handler_state = DY50_ENROLL_HANDLER_STATE_IDLE;
+						}
+					}
 
-				dy50->touch.flag = 0;
+					DY50_EnrolResponseCallBack(dy50, ackCodeEnroll);
+
+					if(dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE)
+					{
+						dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
+						dy50->enroll.handler_state = DY50_ENROLL_HANDLER_STATE_IDLE;
+					}
+
+					dy50->touch.flag = 0;
+				}
 
 				break;
 			case DY50_FINGER_IN_TOUCH_WAITING_TIME:
@@ -903,6 +1055,7 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50)
 				break;
 			case DY50_FINGER_NOT_IN_TOUCH:
 				dy50->touch.flag = 0;
+				dy50->enroll.handler_state = DY50_ENROLL_HANDLER_STATE_IDLE;
 				break;
 			default:
 				break;

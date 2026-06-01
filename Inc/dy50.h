@@ -112,6 +112,20 @@ typedef enum
 
 typedef enum
 {
+	DY50_CMD_DMA_STATUS_IDLE,
+	DY50_CMD_DMA_STATUS_SEND,
+	DY50_CMD_DMA_STATUS_WAITING,
+}DY50_Command_DMA_Status_t;
+
+typedef enum
+{
+	DY50_GENCHAR_STATUS_IDLE,
+	DY50_GENCHAR_STATUS_GET_IMAGE,
+	DY50_GENCHAR_STATUS_GEN_CHAR,
+}DY50_GenerateChar_Status_t;
+
+typedef enum
+{
 	DY50_BUFFER_ID_1  = 0x01,
 	DY50_BUFFER_ID_2  = 0x02,
 	DY50_BUFFER_ID_3  = 0x03,
@@ -127,6 +141,7 @@ typedef enum
 	DY50_ENROLL_STATE_WRITE_BUFFER3 = 3,
 	DY50_ENROLL_STATE_WRITE_BUFFER4 = 4,
 	DY50_ENROLL_STATE_COMPLETE      = 5,
+	DY50_ENROLL_STATE_WAITING_RESPONSE  = 6,
 
 	DY50_ENROLL_ERROR_TIMEOUT      = 100,
 }DY50_EnrollState_t;
@@ -162,13 +177,23 @@ typedef struct
 	uint8_t rx_len;
 }DY50_UART_Info_t;
 
+
+typedef enum
+{
+	DY50_ENROLL_HANDLER_STATE_IDLE,
+	DY50_ENROLL_HANDLER_STATE_INITIALIZED,
+}DY50_Enroll_Handler_State_t;
+
 typedef struct
 {
 	DY50_EnrollState_t last_state;
 	uint32_t last_measure_time;
 	uint32_t debouncing_init_time;
 	int16_t table_id;
+	DY50_Enroll_Handler_State_t handler_state;
 }DY50_Enroll_t;
+
+
 
 typedef struct
 {
@@ -206,33 +231,32 @@ typedef struct
 	DY50_Status_t status;
 	DY50_Info_t info;
 
-
-	//DY50_Gpio_t touch_gpio;
-	//uint8_t touch_flag;
-
 	DY50_Touch_Info_t touch;
 
 	DY50_UART_Info_t uart;
+
+	DY50_Command_DMA_Status_t cmd_dma_status;
+
+	DY50_GenerateChar_Status_t genchar_status;
 	DY50_Enroll_t enroll;
 	DY50_Search_t search;
 
-
-
-
-	//DY50_SearchState_t search_state;
-	//uint32_t search_last_measuere_time;
 }DY50_Typedef_t;
 
 DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *touch_gpio_port, uint16_t touch_gpio_pin);
 DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len);
+DY50_AckCode_t DY50_SendCommandResponse_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len);
 DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password);
 DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value);
 int16_t DY50_FindFirstFreeIDInIndexTable(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTable[], uint8_t size);
 DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50);
+DY50_AckCode_t DY50_CMD_GetImageDMA(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id);
+DY50_AckCode_t DY50_CMD_GenCharDMA(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id);
 DY50_AckCode_t DY50_GenerateChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id);
+DY50_AckCode_t DY50_GenerateCharDMA(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id);
 DY50_AckCode_t DY50_CMD_RegModel(DY50_Typedef_t *dy50);
 uint8_t DY50_ExistFingerOnTouch(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_Enroll(DY50_Typedef_t *dy50);
