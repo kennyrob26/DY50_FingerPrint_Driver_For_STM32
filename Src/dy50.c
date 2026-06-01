@@ -54,7 +54,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
  * @param touch_gpio_port Is a pointer for touch gpio port
  * @param touch_gpio_port Is the touch gpio pin
  *
- * @retval initialization state code
+ * @return initialization state code
  */
 DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *touch_gpio_port, uint16_t touch_gpio_pin)
 {
@@ -170,7 +170,21 @@ static inline void DY50_CalcCheckSum(DY50_packet_t *packet, uint16_t payload_len
 	packet->payload[payload_len + 2] = '\0'; 		//End string (case use strlen)
 }
 
-
+/*
+ * @brief Send a command for DY50 and config response trigger
+ *
+ * @note This is a non-blocking solution for sending a command to DY50
+ *
+ * @warning This function does not return a response, only whether the command was sent,
+ * 			for this purpose, use the SendCommandResponse_DMA function
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param cmd   The command to be sent
+ * @param tx_payload_len It is the payload capacity of the transmission
+ * @param rx_payload_len It is the payload capacity of the receiving
+ *
+ * @return whether the command was SENT successfully
+ */
 DY50_AckCode_t DY50_SendCommand_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
@@ -200,13 +214,29 @@ DY50_AckCode_t DY50_SendCommand_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, u
 	if(HAL_UART_Transmit(dy50->huart, dy50->uart.buf_tx.raw, size_total_bytes, 100) != HAL_OK)
 		return ACK_ERROR_UART_TX;
 
+	dy50->response_time = HAL_GetTick();
+
 	return ACK_OK;
 }
 
-DY50_AckCode_t DY50_Wait_Command_Response(DY50_Typedef_t *dy50)
+/*
+ * @brief Awaiting a response from a command
+ *
+ * @note This is a non-blocking version for waiting for a command response (DMA only).
+ * 		 The basis is the dma_flag, which is set when a touch interruption occurs.
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param timeout_response Set a maximum waiting time for the response
+ *
+ * @return whether command response is Valid
+ */
+DY50_AckCode_t DY50_WaitCommandResponse(DY50_Typedef_t *dy50, uint32_t timeout_response)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if((HAL_GetTick() - dy50->response_time) > timeout_response)
+		return ACK_ERROR_TIMEOUT;
 
 	if(dy50->uart.dma_flag == 1)
 	{
@@ -222,15 +252,26 @@ DY50_AckCode_t DY50_Wait_Command_Response(DY50_Typedef_t *dy50)
 	return ACK_WATING_RESPONSE;
 }
 
-DY50_AckCode_t DY50_Wait_Command_Response_Block(DY50_Typedef_t *dy50)
+/*
+ * @brief Awaiting a response from a command (Block code)
+ *
+ * @note This is a blocking version for waiting for a command response,
+ * 	     used when it is necessary to block the code until the response arrives
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param timeout_response Set a maximum waiting time for the response
+ *
+ * @return whether command response is Valid
+ */
+DY50_AckCode_t DY50_WaitCommandResponseBlock(DY50_Typedef_t *dy50, uint32_t timeout_response)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	DY50_AckCode_t ack_response = DY50_Wait_Command_Response(dy50);
+	DY50_AckCode_t ack_response = DY50_WaitCommandResponse(dy50, timeout_response);
 	while(ack_response == ACK_WATING_RESPONSE)
 	{
-		ack_response = DY50_Wait_Command_Response(dy50);
+		ack_response = DY50_WaitCommandResponse(dy50, timeout_response);
 		//Block code waiting response
 	}
 
@@ -253,48 +294,77 @@ DY50_AckCode_t DY50_Wait_Command_Response_Block(DY50_Typedef_t *dy50)
  * @param cmd   The command to be sent
  * @param tx_payload_len It is the payload capacity of the transmission
  * @param rx_payload_len It is the payload capacity of the receiving
+ * @param timeout_response Set a maximum waiting time for the response
  *
- * @retval Returns whether the command was successful
+ * @returns whether the command was successful
  *
  */
-DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len)
+DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len, uint32_t timeout_response)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
 	DY50_SendCommand_DMA(dy50, cmd, tx_payload_len, rx_payload_len);
-	return DY50_Wait_Command_Response_Block(dy50);
+	return DY50_WaitCommandResponseBlock(dy50, 1000);
+}
 
-//	dy50->uart.buf_tx.packet.header      = DY50_HEADER;
-//	dy50->uart.buf_tx.packet.chip_adress = DY50_ADDRESS;
-//	dy50->uart.buf_tx.packet.flag        = DY50_FLAG_COMMAND;
-//	dy50->uart.buf_tx.packet.code        = cmd;
-//
-//	const uint8_t code_len     = 1;
-//	const uint8_t checksum_len = 2;
-//	uint8_t packet_length = code_len + tx_payload_len + checksum_len;
-//
-//	dy50->uart.buf_tx.packet.length  = SWAP16(packet_length);
-//
-//	DY50_CalcCheckSum(&dy50->uart.buf_tx.packet, tx_payload_len);
-//
-//	const uint8_t size_fix_bytes = 9; //header + address + flag + length
-//	uint16_t size_total_bytes = size_fix_bytes + packet_length;
-//
-//	if(HAL_UART_Transmit(dy50->huart, dy50->uart.buf_tx.raw, size_total_bytes, 100) != HAL_OK)
-//		return ACK_ERROR_UART_TX;
-//
-//	if(HAL_UART_Receive(dy50->huart, dy50->uart.buf_rx.raw, (ACK_PACKET_SIZE + rx_payload_len), 500) != HAL_OK)
-//		return ACK_ERROR_UART_RX;
-//
-//
-//	if(DY50_PacketAckIsValid(&dy50->uart.buf_rx.packet))
-//	{
-//		return dy50->uart.buf_rx.packet.code;
-//	}
-//
-//	return ACK_ERROR_RESPONSE;
+/*
+ * @brief Sending a command and waiting for a response (without blocking the code)
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param cmd   The command to be sent
+ * @param tx_payload_len It is the payload capacity of the transmission
+ * @param rx_payload_len It is the payload capacity of the receiving
+ * @param timeout_response Set a maximum waiting time for the response
+ */
+DY50_AckCode_t DY50_SendCommandResponse_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len, uint32_t timeout_response)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
 
+	DY50_AckCode_t ack_code;
+
+	switch (dy50->cmd_dma_status)
+	{
+		case DY50_CMD_DMA_STATUS_IDLE:
+		case DY50_CMD_DMA_STATUS_SEND:
+
+			dy50->uart.dma_flag = 0;
+
+			ack_code = DY50_SendCommand_DMA(dy50, cmd, tx_payload_len, rx_payload_len);
+
+			if(ack_code == ACK_OK)
+			{
+				dy50->cmd_dma_status = DY50_CMD_DMA_STATUS_WAITING;
+				ack_code = ACK_WATING_RESPONSE;
+			}
+			else
+				dy50->cmd_dma_status = DY50_CMD_DMA_STATUS_IDLE;
+			break;
+
+		case DY50_CMD_DMA_STATUS_WAITING:
+
+			ack_code = DY50_WaitCommandResponse(dy50, timeout_response);
+
+			switch (ack_code)
+			{
+				case ACK_WATING_RESPONSE:
+					dy50->cmd_dma_status = DY50_CMD_DMA_STATUS_WAITING;
+					break;
+				case ACK_OK:
+					dy50->cmd_dma_status = DY50_CMD_DMA_STATUS_IDLE;
+					break;
+				default:
+					dy50->cmd_dma_status = DY50_CMD_DMA_STATUS_IDLE;
+					break;
+			}
+
+			break;
+		default:
+			break;
+	}
+
+	return ack_code;
 }
 
 /*
@@ -313,7 +383,7 @@ DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50)
 
 	DY50_AckCode_t ack_code;
 
-	ack_code = DY50_SendCommand(dy50, DY50_CMD_READ_SYSTEM_PARAMS, PACKET_NOT_PAYLOAD, 16);
+	ack_code = DY50_SendCommand(dy50, DY50_CMD_READ_SYSTEM_PARAMS, PACKET_NOT_PAYLOAD, 16, 500);
 
 	if(ack_code == ACK_OK)
 	{
@@ -349,7 +419,7 @@ DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
 	dy50->uart.buf_tx.packet.payload[2] = (uint8_t)((password >> 8)  & 0x000000FF);
 	dy50->uart.buf_tx.packet.payload[3] = (uint8_t)(password  & 0x000000FF);
 
-	return DY50_SendCommand(dy50, DY50_CMD_VERIFY_PASSWORD, 4, PACKET_NOT_PAYLOAD);
+	return DY50_SendCommand(dy50, DY50_CMD_VERIFY_PASSWORD, 4, PACKET_NOT_PAYLOAD, 500);
 }
 
 
@@ -365,6 +435,8 @@ DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
  * @param dy50  Is a pointer for dy50 handler
  * @param start_id is is the initial ID where we intend to begin the search
  * @param end_id is the final ID, meaning it limits how far we want to search for the last ID
+ *
+ * @returns extimed last id
  */
 int16_t DY50_FindLastIndexFilled(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t end_id)
 {
@@ -405,7 +477,7 @@ int16_t DY50_FindLastIndexFilled(DY50_Typedef_t *dy50, uint16_t start_id, uint16
  * @param index is the index we want to mark
  * @param value use 1 to select the ID and 0 to deselect the ID
  *
- * @retval Returns whether it was possible to set the value in the ID
+ * @returns whether it was possible to set the value in the ID
  */
 DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value)
 {
@@ -435,7 +507,7 @@ DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t 
  * @param byte_value is a target byte
  * @param byte_size the number of valid bits in the byte
  *
- * @retval return the bit index, if it exists, or returns 0xFF if the byte is full
+ * @return the bit index, if it exists, or returns 0xFF if the byte is full
  */
 static inline uint8_t DY50_GetBitIndex(uint8_t byte_value, uint8_t byte_size)
 {
@@ -453,7 +525,7 @@ static inline uint8_t DY50_GetBitIndex(uint8_t byte_value, uint8_t byte_size)
  *
  * @param dy50  Is a pointer for dy50 handler
  *
- * @retval returns the first index found, or -1 in case of error or full table
+ * @returns the first index found, or -1 in case of error or full table
  */
 int16_t DY50_FindFirstFreeIDInIndexTable(DY50_Typedef_t *dy50)
 {
@@ -519,7 +591,7 @@ int16_t DY50_FindFirstFreeIDInIndexTable(DY50_Typedef_t *dy50)
  * 	@param readIndexTable[] the array that receives all the IDs
  * 	@param size is a size of readIndexTable[], The size determines how much data will be returned
  *
- * 	@retval returns whether it was possible to read the index table
+ * 	@returns whether it was possible to read the index table
  *
  */
 DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTable[], uint8_t size)
@@ -534,7 +606,7 @@ DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTa
 
 	//Get page 0
 	dy50->uart.buf_tx.packet.payload[0] = 0x00;
-	code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size);
+	code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size, 500);
 
 	if(size >= page_size)
 		memcpy(readIndexTable, dy50->uart.buf_rx.packet.payload, page_size);
@@ -547,7 +619,7 @@ DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTa
 		if(size > page_size)
 		{
 			dy50->uart.buf_tx.packet.payload[0] = 0x01;
-			code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size);
+			code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size, 500);
 
 			uint8_t remaining_bytes = (size - 32);
 
@@ -569,28 +641,34 @@ DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTa
  *
  * @param dy50  Is a pointer for dy50 handler
  *
- * @retval return whether it was possible to generate the image
+ * @return whether it was possible to generate the image
  */
 DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	return DY50_SendCommand(dy50, DY50_CMD_GET_IMAGE, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD);
+	return DY50_SendCommand(dy50, DY50_CMD_GET_IMAGE, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD, 500);
 }
 
-DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
+/*
+ * @brief Command Get Image (0x01) (DMA without blocking version)
+ *
+ * @note This command reads the fingerprint from sensor and generates the image.
+ * 		 IMPORTANT: The image is storage in image buffer, then, the GenChar command must be used
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @return whether it was possible to generate the image
+ */
+DY50_AckCode_t DY50_CMD_GetImageDMA(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	if((buffer_id < DY50_BUFFER_ID_1) && (buffer_id > DY50_BUFFER_ID_4))
-		return ACK_ERROR_INVALID_PARAMETER;
-
-	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
-
-	return(DY50_SendCommand(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD));
+	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_GET_IMAGE, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD, 500);
 }
+
 
 /*
  * @brief Command Generate Char (0x02)
@@ -610,6 +688,67 @@ DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id
  *
  * @retval returns whether the image was generated successfully
  */
+DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if((buffer_id < DY50_BUFFER_ID_1) && (buffer_id > DY50_BUFFER_ID_4))
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
+
+	return(DY50_SendCommand(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD, 500));
+}
+
+/*
+ * @brief Command Generate Char (0x02) (DMA without blocking version)
+ *
+ * @note Generating Fingerprint image generation based on the original image
+ * 		 IMPORTANT: The command Get Image is called before Generate Char
+ *
+ * @note The Generate Char stores in a temporary buffer, DY50 has 4 buffer:
+ *	     1 - CharBuffer1
+ *	     2 - CharBuffer2
+ *	     3 - CharBuffer3
+ *	     4 - CharBuffer4
+*	     Each buffer stores a fingerprint image
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param buffer_id define in wich CharBuffer the fingerprint will be stored
+ *
+ * @returns whether the image was generated successfully
+ */
+DY50_AckCode_t DY50_CMD_GenCharDMA(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if((buffer_id < DY50_BUFFER_ID_1) && (buffer_id > DY50_BUFFER_ID_4))
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
+
+	return(DY50_SendCommandResponse_DMA(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD, 500));
+}
+
+
+/*
+ * @brief Generate Char function
+ *
+ * @note This function uses the GetImage function to read a fingerprint from the sensor,
+ *       and then uses GenChar to generate an image based on the reading obtained with GetImage
+ * @note The Generate Char stores in a temporary buffer, DY50 has 4 buffer:
+ *	     1 - CharBuffer1
+ *	     2 - CharBuffer2
+ *	     3 - CharBuffer3
+ *	     4 - CharBuffer4
+*	     Each buffer stores a fingerprint image
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param buffer_id Defines in which buffet the generated image will be stored
+ * @returns whether the image was generated successfully
+ */
 DY50_AckCode_t DY50_GenerateChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
@@ -621,6 +760,71 @@ DY50_AckCode_t DY50_GenerateChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id
 	if(code == ACK_OK)
 	{
 		code = DY50_CMD_GenChar(dy50, buffer_id);
+	}
+
+	return code;
+}
+
+/*
+ * @brief Generate Char function (DMA without blocking version)
+ *
+ * @note This function uses the GetImage function to read a fingerprint from the sensor,
+ *       and then uses GenChar to generate an image based on the reading obtained with GetImage
+ * @note The Generate Char stores in a temporary buffer, DY50 has 4 buffer:
+ *	     1 - CharBuffer1
+ *	     2 - CharBuffer2
+ *	     3 - CharBuffer3
+ *	     4 - CharBuffer4
+*	     Each buffer stores a fingerprint image
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param buffer_id Defines in which buffet the generated image will be stored
+ * @returns whether the image was generated successfully
+ */
+DY50_AckCode_t DY50_GenerateCharDMA(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	DY50_AckCode_t code = ACK_WATING_RESPONSE;
+
+	switch (dy50->genchar_status)
+	{
+		case DY50_GENCHAR_STATUS_IDLE:
+			dy50->genchar_status = DY50_GENCHAR_STATUS_GET_IMAGE;
+		case DY50_GENCHAR_STATUS_GET_IMAGE:
+
+			code = DY50_CMD_GetImageDMA(dy50);
+
+			if(code == ACK_OK)
+			{
+				dy50->genchar_status = DY50_GENCHAR_STATUS_GEN_CHAR;
+				code = ACK_WATING_RESPONSE;
+			}
+			else if(code != ACK_WATING_RESPONSE)
+			{
+				dy50->genchar_status = DY50_GENCHAR_STATUS_IDLE;
+			}
+
+			break;
+
+		case DY50_GENCHAR_STATUS_GEN_CHAR:
+
+			code = DY50_CMD_GenCharDMA(dy50, buffer_id);
+
+			if(code == ACK_OK)
+			{
+				dy50->genchar_status = DY50_GENCHAR_STATUS_IDLE;
+			}
+			else if(code != ACK_WATING_RESPONSE)
+			{
+				dy50->genchar_status = DY50_GENCHAR_STATUS_IDLE;
+			}
+
+			break;
+		default:
+			dy50->genchar_status = DY50_GENCHAR_STATUS_IDLE;
+			break;
 	}
 
 	return code;
@@ -641,7 +845,7 @@ DY50_AckCode_t DY50_CMD_RegModel(DY50_Typedef_t *dy50)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	return(DY50_SendCommand(dy50, DY50_CMD_REG_MODEL, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD));
+	return(DY50_SendCommand(dy50, DY50_CMD_REG_MODEL, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD, 500));
 }
 
 /*
@@ -652,7 +856,7 @@ DY50_AckCode_t DY50_CMD_RegModel(DY50_Typedef_t *dy50)
  * @param buffer_id  the buffer where the template generated by RegModel is located (by default it is always in CharBuffer1)
  * @param page_id    This is the ID that the template will be stored under in the DY50 flash database
  *
- * @retval Returns whether it was possible to store the template in the DY50 flash database
+ * @returns whether it was possible to store the template in the DY50 flash database
  *
  * @warning If page_id already exists in Flash, it will be replaced without prior notice
  */
@@ -670,7 +874,7 @@ DY50_AckCode_t DY50_CMD_StoreChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_i
 	dy50->uart.buf_tx.packet.payload[1] = (uint8_t)((page_id >> 8) & 0x00FF);
 	dy50->uart.buf_tx.packet.payload[2] = (uint8_t)(page_id & 0x00FF);
 
-	ack_code = DY50_SendCommand(dy50, DY50_CMD_STORE_CHAR, 3, PACKET_NOT_PAYLOAD);
+	ack_code = DY50_SendCommand(dy50, DY50_CMD_STORE_CHAR, 3, PACKET_NOT_PAYLOAD, 500);
 
 	if(ack_code == ACK_OK)
 	{
@@ -687,9 +891,9 @@ DY50_AckCode_t DY50_CMD_StoreChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_i
  *
  * @param error receives an ack code
  *
- * @retval returns whether it's a bad image error
+ * @returns whether it's a bad image error
  *
- * @return 1 case bad image error or 0 case other error
+ * @retval 1 case bad image error or 0 case other error
  */
 static inline uint8_t checkIfBadImageError(DY50_AckCode_t error)
 {
@@ -716,7 +920,7 @@ static inline uint8_t checkIfBadImageError(DY50_AckCode_t error)
  *
  * @param dy50  Is a pointer for dy50 handler
  *
- * @retval Returns whether there is a finger on the sensor
+ * @returns whether there is a finger on the sensor
  *
  * @warning Please note that for the function to work correctly, the DY50's touch screen must be properly configured
  */
@@ -754,7 +958,7 @@ DY50_FingerTouchState_t DY50_FingerIsOnTouch(DY50_Typedef_t *dy50)
  *
  * @param dy50  Is a pointer for dy50 handler
  *
- * @retval Returns whether the enroll flow was successful
+ * @returns whether the enroll flow was successful
  *
  */
 DY50_AckCode_t DY50_Enroll(DY50_Typedef_t *dy50)
@@ -804,12 +1008,17 @@ DY50_AckCode_t DY50_Enroll(DY50_Typedef_t *dy50)
 				break;
 		}
 
-		ack_code = DY50_GenerateChar(dy50, buffer_id);
+		//ack_code = DY50_GenerateChar(dy50, buffer_id);
+		ack_code = DY50_GenerateCharDMA(dy50, buffer_id);
 		if(ack_code == ACK_OK)
 		{
 			dy50->enroll.last_measure_time = HAL_GetTick();
 		}
-		else if(checkIfBadImageError(ack_code))
+		else if(ack_code == ACK_WATING_RESPONSE)
+		{
+			dy50->enroll.last_state--;   //Repeat current state, waiting response
+		}
+		else if( checkIfBadImageError(ack_code))
 		{
 			dy50->enroll.last_state--;   //Repeat current state
 			dy50->enroll.last_measure_time = HAL_GetTick();
@@ -867,35 +1076,57 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50)
 
 	if(dy50->touch.flag == 1)
 	{
-		DY50_FingerTouchState_t finger_state = DY50_FingerIsOnTouch(dy50);
-
+		DY50_FingerTouchState_t finger_state;
+		if(dy50->enroll.handler_state == DY50_ENROLL_HANDLER_STATE_IDLE)
+		{
+			finger_state = DY50_FingerIsOnTouch(dy50);
+			if(finger_state == DY50_FINGER_IN_TOUCH_ACCEPTED)
+				dy50->enroll.handler_state = DY50_ENROLL_HANDLER_STATE_INITIALIZED;
+		}
+		else
+			finger_state = HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin);
 
 		switch (finger_state) {
 			case DY50_FINGER_IN_TOUCH_ACCEPTED:
 				DY50_AckCode_t ackCodeEnroll = DY50_Enroll(dy50);
 
-				if((ackCodeEnroll == ACK_OK) && (dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE))
+				if(ackCodeEnroll == ACK_WATING_RESPONSE)
 				{
-					ackCodeEnroll = DY50_CMD_RegModel(dy50);
-					if(ackCodeEnroll == ACK_OK)
-					{
-						ackCodeEnroll = DY50_CMD_StoreChar(dy50, DY50_BUFFER_ID_1, dy50->enroll.table_id);
-
-						if(ackCodeEnroll != ACK_OK)
-							dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;  //StoreChar Error
-					}
-					else
-					{
-					  dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;			//RegModel Error
-					}
+					return;
 				}
+				else
+				{
 
-				DY50_EnrolResponseCallBack(dy50, ackCodeEnroll);
+					if((ackCodeEnroll == ACK_OK) && (dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE))
+					{
+						ackCodeEnroll = DY50_CMD_RegModel(dy50);
+						if(ackCodeEnroll == ACK_OK)
+						{
+							ackCodeEnroll = DY50_CMD_StoreChar(dy50, DY50_BUFFER_ID_1, dy50->enroll.table_id);
 
-				if(dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE)
-					dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
+							if(ackCodeEnroll != ACK_OK)
+							{
+								dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;  //StoreChar Error
+								dy50->enroll.handler_state = DY50_ENROLL_HANDLER_STATE_IDLE;
+							}
+						}
+						else
+						{
+						  dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;			//RegModel Error
+						  dy50->enroll.handler_state = DY50_ENROLL_HANDLER_STATE_IDLE;
+						}
+					}
 
-				dy50->touch.flag = 0;
+					DY50_EnrolResponseCallBack(dy50, ackCodeEnroll);
+
+					if(dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE)
+					{
+						dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
+						dy50->enroll.handler_state = DY50_ENROLL_HANDLER_STATE_IDLE;
+					}
+
+					dy50->touch.flag = 0;
+				}
 
 				break;
 			case DY50_FINGER_IN_TOUCH_WAITING_TIME:
@@ -903,6 +1134,7 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50)
 				break;
 			case DY50_FINGER_NOT_IN_TOUCH:
 				dy50->touch.flag = 0;
+				dy50->enroll.handler_state = DY50_ENROLL_HANDLER_STATE_IDLE;
 				break;
 			default:
 				break;
@@ -920,6 +1152,8 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50)
  *
  * @param dy50  Is a pointer for dy50 handler
  * @param ackCode use to check the status of the last command
+ *
+ * @retval none
  */
 __weak void DY50_EnrolResponseCallBack(DY50_Typedef_t *dy50, DY50_AckCode_t ackCode)
 {
@@ -975,9 +1209,9 @@ __weak void DY50_EnrolResponseCallBack(DY50_Typedef_t *dy50, DY50_AckCode_t ackC
  * @param start_page_id  This refers to the page ID in the Flash database where the search begins
  * @param page_num Defines how many page IDs we will read after the start page
  *
- * @retval return if the fingerprint we were looking for was found
+ * @return if the fingerprint we were looking for was found
  *
- * @return 0x00 -> Successfull or 0x09 -> fingerprint not found
+ * @retval 0x00 -> Successfull or 0x09 -> fingerprint not found
  */
 DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t start_page_id, uint16_t page_num)
 {
@@ -993,7 +1227,8 @@ DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, 
 	const uint8_t payload_tx_len = 5,
 		          payload_rx_len = 4;
 
-	return DY50_SendCommand_DMA(dy50, Dy50_CMD_SEARCH, payload_tx_len, payload_rx_len);
+	//return DY50_SendCommand_DMA(dy50, Dy50_CMD_SEARCH, payload_tx_len, payload_rx_len);
+	return DY50_SendCommandResponse_DMA(dy50, Dy50_CMD_SEARCH, payload_tx_len, payload_rx_len, 500);
 }
 
 /*
@@ -1005,7 +1240,7 @@ DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, 
  * @param id_found this is the ID found by the search. If it is 0xFFFF, no match was found
  * @param math_score Returns a value from 0 to 255 indicating how closely the fingerprint matches the one found in the database
  *
- * @retval Returns whether the search was successful
+ * @returns whether the search was successful
  */
 DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 {
@@ -1014,95 +1249,89 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 	DY50_AckCode_t ack_code = ACK_OK;
 
-	switch (dy50->search.state)
+	int16_t last_id;
+
+	if(HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin) == 0)
 	{
-		case DY50_SEARCH_STATE_IDLE:
+		switch (dy50->search.state)
+		{
+			case DY50_SEARCH_STATE_IDLE:
 
-			if((HAL_GetTick() - dy50->search.last_measuere_time) > SEARCH_MIN_TIME_BETWEEN_READING)
-			{
-				dy50->search.last_measuere_time = HAL_GetTick();
-				dy50->search.state = DY50_SEARCH_STATE_CMD_SEARCH;
-			}
-			else
-				ack_code = ACK_OK;	//There are no errors, just waiting
-			break;
-
-		case DY50_SEARCH_STATE_CMD_SEARCH:
-
-			if(HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin) == 0)
-			{
-				int16_t last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
-
-				if(last_id <= 0)
+				if((HAL_GetTick() - dy50->search.last_measuere_time) > SEARCH_MIN_TIME_BETWEEN_READING)
 				{
-					ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
-				}
-				else
-				{
-					ack_code = DY50_GenerateChar(dy50, DY50_BUFFER_ID_1);
-					if(ack_code == ACK_OK)
+					dy50->search.last_measuere_time = HAL_GetTick();
+
+					last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
+
+					if(last_id <= 0)
 					{
-						ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
-						if(ack_code == ACK_OK)
-							dy50->search.state = DY50_SEARCH_STATE_WAITING_RESPONSE;
+						ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
 					}
 					else
 					{
-						dy50->search.state = DY50_SEARCH_STATE_IDLE;
+						dy50->search.state = DY50_SEARCH_STATE_CMD_GENCHAR;
 					}
+
 				}
-			}
-			else
-			{
-				dy50->search.state = DY50_SEARCH_STATE_IDLE;
-				ack_code = ACK_ERROR;
-			}
+				else
+					ack_code = ACK_OK;	//There are no errors, just waiting
+				break;
 
-			break;
+			case DY50_SEARCH_STATE_CMD_GENCHAR:
 
-		case DY50_SEARCH_STATE_WAITING_RESPONSE:
+				ack_code = DY50_GenerateCharDMA(dy50, DY50_BUFFER_ID_1);
 
-			uint8_t callback_is_valid = 1;
-			DY50_Search_Return_t search_return = {.id_found = 0xFFFF, .math_score = 0};
-			dy50->search.state = DY50_SEARCH_STATE_COMPLETED;    //It only remains complete if it is not expecting a response
+				if(ack_code == ACK_OK)
+				{
+					dy50->search.state = DY50_SEARCH_STATE_CMD_SEARCH;
+				}
+				else if(ack_code != ACK_WATING_RESPONSE)
+				{
+					dy50->search.state = DY50_SEARCH_STATE_IDLE;
+				}
+				break;
 
-			ack_code = DY50_Wait_Command_Response(dy50);
+			case DY50_SEARCH_STATE_CMD_SEARCH:
 
-			switch (ack_code)
-			{
-				case ACK_WATING_RESPONSE:
+				last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
+				ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
+				DY50_Search_Return_t search_return = {.id_found = 0xFFFF, .math_score = 0};
 
-					dy50->search.state = DY50_SEARCH_STATE_WAITING_RESPONSE;
-					callback_is_valid = 0;
-					break;
+				uint8_t callback_is_valid = 0;
 
-				case ACK_OK:
-
+				if(ack_code == ACK_OK)
+				{
 					search_return.id_found =  ((uint16_t)dy50->uart.buf_rx.packet.payload[0]) << 8;
 					search_return.id_found |= (((uint16_t)dy50->uart.buf_rx.packet.payload[1]) & 0x00FF);
 
 					search_return.math_score = dy50->uart.buf_rx.packet.payload[3];
 
 					callback_is_valid = 1;
-					break;
-
-				case ACK_ERROR_FINGERPRINT_NOT_FOUND:
-
+				}
+				else if(ack_code == ACK_ERROR_FINGERPRINT_NOT_FOUND)
+				{
 					callback_is_valid = 1;
-					break;
-
-				default:
+					dy50->search.state = DY50_SEARCH_STATE_IDLE;
+				}
+				else if(ack_code != ACK_WATING_RESPONSE)
+				{
 					callback_is_valid = 0;
 					dy50->search.state = DY50_SEARCH_STATE_IDLE;
-					break;
-			}
+				}
 
-			if(callback_is_valid)
-				DY50_SearchResponseCallBack(dy50, &search_return);
+				if(callback_is_valid)
+					DY50_SearchResponseCallBack(dy50, &search_return);
 
-			break;
-		default:
-			break;
+				break;
+			default:
+				break;
+		}
+
+	}
+	else
+	{
+		dy50->search.state = DY50_SEARCH_STATE_IDLE;
+		ack_code = ACK_ERROR;
 	}
 
 	if(dy50->search.state == DY50_SEARCH_STATE_COMPLETED)
@@ -1119,7 +1348,15 @@ __weak void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, const DY50_Search_
 
 }
 
-
+/*
+ * @brief The main Handler of the DY50
+ *
+ * @note This is a main Handler, a state machine that controls which handler will be executed
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @retval none
+ */
 void DY50_TaskHandler(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
