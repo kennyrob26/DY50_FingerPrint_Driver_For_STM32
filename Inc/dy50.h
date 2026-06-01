@@ -236,6 +236,8 @@ typedef struct
 
 	DY50_UART_Info_t uart;
 
+	uint32_t response_time;
+
 	DY50_Command_DMA_Status_t cmd_dma_status;
 
 	DY50_GenerateChar_Status_t genchar_status;
@@ -245,8 +247,9 @@ typedef struct
 }DY50_Typedef_t;
 
 DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *touch_gpio_port, uint16_t touch_gpio_pin);
-DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len);
-DY50_AckCode_t DY50_SendCommandResponse_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len);
+DY50_AckCode_t DY50_WaitCommandResponse(DY50_Typedef_t *dy50, uint32_t timeout_response);
+DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len, uint32_t timeout_response);
+DY50_AckCode_t DY50_SendCommandResponse_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len, uint32_t timeout_response);
 DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password);
 DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value);
