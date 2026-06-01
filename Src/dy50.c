@@ -263,7 +263,7 @@ DY50_AckCode_t DY50_WaitCommandResponse(DY50_Typedef_t *dy50, uint32_t timeout_r
  *
  * @return whether command response is Valid
  */
-DY50_AckCode_t DY50_Wait_Command_Response_Block(DY50_Typedef_t *dy50, uint32_t timeout_response)
+DY50_AckCode_t DY50_WaitCommandResponseBlock(DY50_Typedef_t *dy50, uint32_t timeout_response)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -305,7 +305,7 @@ DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint1
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
 	DY50_SendCommand_DMA(dy50, cmd, tx_payload_len, rx_payload_len);
-	return DY50_Wait_Command_Response_Block(dy50, 1000);
+	return DY50_WaitCommandResponseBlock(dy50, 1000);
 }
 
 /*
@@ -435,6 +435,8 @@ DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
  * @param dy50  Is a pointer for dy50 handler
  * @param start_id is is the initial ID where we intend to begin the search
  * @param end_id is the final ID, meaning it limits how far we want to search for the last ID
+ *
+ * @returns extimed last id
  */
 int16_t DY50_FindLastIndexFilled(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t end_id)
 {
@@ -475,7 +477,7 @@ int16_t DY50_FindLastIndexFilled(DY50_Typedef_t *dy50, uint16_t start_id, uint16
  * @param index is the index we want to mark
  * @param value use 1 to select the ID and 0 to deselect the ID
  *
- * @retval Returns whether it was possible to set the value in the ID
+ * @returns whether it was possible to set the value in the ID
  */
 DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value)
 {
@@ -505,7 +507,7 @@ DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t 
  * @param byte_value is a target byte
  * @param byte_size the number of valid bits in the byte
  *
- * @retval return the bit index, if it exists, or returns 0xFF if the byte is full
+ * @return the bit index, if it exists, or returns 0xFF if the byte is full
  */
 static inline uint8_t DY50_GetBitIndex(uint8_t byte_value, uint8_t byte_size)
 {
@@ -523,7 +525,7 @@ static inline uint8_t DY50_GetBitIndex(uint8_t byte_value, uint8_t byte_size)
  *
  * @param dy50  Is a pointer for dy50 handler
  *
- * @retval returns the first index found, or -1 in case of error or full table
+ * @returns the first index found, or -1 in case of error or full table
  */
 int16_t DY50_FindFirstFreeIDInIndexTable(DY50_Typedef_t *dy50)
 {
@@ -589,7 +591,7 @@ int16_t DY50_FindFirstFreeIDInIndexTable(DY50_Typedef_t *dy50)
  * 	@param readIndexTable[] the array that receives all the IDs
  * 	@param size is a size of readIndexTable[], The size determines how much data will be returned
  *
- * 	@retval returns whether it was possible to read the index table
+ * 	@returns whether it was possible to read the index table
  *
  */
 DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTable[], uint8_t size)
@@ -639,7 +641,7 @@ DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTa
  *
  * @param dy50  Is a pointer for dy50 handler
  *
- * @retval return whether it was possible to generate the image
+ * @return whether it was possible to generate the image
  */
 DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50)
 {
@@ -649,40 +651,22 @@ DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50)
 	return DY50_SendCommand(dy50, DY50_CMD_GET_IMAGE, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD, 500);
 }
 
+/*
+ * @brief Command Get Image (0x01) (DMA without blocking version)
+ *
+ * @note This command reads the fingerprint from sensor and generates the image.
+ * 		 IMPORTANT: The image is storage in image buffer, then, the GenChar command must be used
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @return whether it was possible to generate the image
+ */
 DY50_AckCode_t DY50_CMD_GetImageDMA(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
 	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_GET_IMAGE, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD, 500);
-}
-
-
-
-DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
-{
-	if(dy50->status == DY50_STATUS_UNINITIALIZED)
-		return ACK_ERROR_DY50_UNINITIALIZED;
-
-	if((buffer_id < DY50_BUFFER_ID_1) && (buffer_id > DY50_BUFFER_ID_4))
-		return ACK_ERROR_INVALID_PARAMETER;
-
-	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
-
-	return(DY50_SendCommand(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD, 500));
-}
-
-DY50_AckCode_t DY50_CMD_GenCharDMA(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
-{
-	if(dy50->status == DY50_STATUS_UNINITIALIZED)
-		return ACK_ERROR_DY50_UNINITIALIZED;
-
-	if((buffer_id < DY50_BUFFER_ID_1) && (buffer_id > DY50_BUFFER_ID_4))
-		return ACK_ERROR_INVALID_PARAMETER;
-
-	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
-
-	return(DY50_SendCommandResponse_DMA(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD, 500));
 }
 
 
@@ -704,6 +688,67 @@ DY50_AckCode_t DY50_CMD_GenCharDMA(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer
  *
  * @retval returns whether the image was generated successfully
  */
+DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if((buffer_id < DY50_BUFFER_ID_1) && (buffer_id > DY50_BUFFER_ID_4))
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
+
+	return(DY50_SendCommand(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD, 500));
+}
+
+/*
+ * @brief Command Generate Char (0x02) (DMA without blocking version)
+ *
+ * @note Generating Fingerprint image generation based on the original image
+ * 		 IMPORTANT: The command Get Image is called before Generate Char
+ *
+ * @note The Generate Char stores in a temporary buffer, DY50 has 4 buffer:
+ *	     1 - CharBuffer1
+ *	     2 - CharBuffer2
+ *	     3 - CharBuffer3
+ *	     4 - CharBuffer4
+*	     Each buffer stores a fingerprint image
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param buffer_id define in wich CharBuffer the fingerprint will be stored
+ *
+ * @returns whether the image was generated successfully
+ */
+DY50_AckCode_t DY50_CMD_GenCharDMA(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if((buffer_id < DY50_BUFFER_ID_1) && (buffer_id > DY50_BUFFER_ID_4))
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
+
+	return(DY50_SendCommandResponse_DMA(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD, 500));
+}
+
+
+/*
+ * @brief Generate Char function
+ *
+ * @note This function uses the GetImage function to read a fingerprint from the sensor,
+ *       and then uses GenChar to generate an image based on the reading obtained with GetImage
+ * @note The Generate Char stores in a temporary buffer, DY50 has 4 buffer:
+ *	     1 - CharBuffer1
+ *	     2 - CharBuffer2
+ *	     3 - CharBuffer3
+ *	     4 - CharBuffer4
+*	     Each buffer stores a fingerprint image
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param buffer_id Defines in which buffet the generated image will be stored
+ * @returns whether the image was generated successfully
+ */
 DY50_AckCode_t DY50_GenerateChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
@@ -720,8 +765,22 @@ DY50_AckCode_t DY50_GenerateChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id
 	return code;
 }
 
-
-
+/*
+ * @brief Generate Char function (DMA without blocking version)
+ *
+ * @note This function uses the GetImage function to read a fingerprint from the sensor,
+ *       and then uses GenChar to generate an image based on the reading obtained with GetImage
+ * @note The Generate Char stores in a temporary buffer, DY50 has 4 buffer:
+ *	     1 - CharBuffer1
+ *	     2 - CharBuffer2
+ *	     3 - CharBuffer3
+ *	     4 - CharBuffer4
+*	     Each buffer stores a fingerprint image
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param buffer_id Defines in which buffet the generated image will be stored
+ * @returns whether the image was generated successfully
+ */
 DY50_AckCode_t DY50_GenerateCharDMA(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
@@ -797,7 +856,7 @@ DY50_AckCode_t DY50_CMD_RegModel(DY50_Typedef_t *dy50)
  * @param buffer_id  the buffer where the template generated by RegModel is located (by default it is always in CharBuffer1)
  * @param page_id    This is the ID that the template will be stored under in the DY50 flash database
  *
- * @retval Returns whether it was possible to store the template in the DY50 flash database
+ * @returns whether it was possible to store the template in the DY50 flash database
  *
  * @warning If page_id already exists in Flash, it will be replaced without prior notice
  */
@@ -832,9 +891,9 @@ DY50_AckCode_t DY50_CMD_StoreChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_i
  *
  * @param error receives an ack code
  *
- * @retval returns whether it's a bad image error
+ * @returns whether it's a bad image error
  *
- * @return 1 case bad image error or 0 case other error
+ * @retval 1 case bad image error or 0 case other error
  */
 static inline uint8_t checkIfBadImageError(DY50_AckCode_t error)
 {
@@ -861,7 +920,7 @@ static inline uint8_t checkIfBadImageError(DY50_AckCode_t error)
  *
  * @param dy50  Is a pointer for dy50 handler
  *
- * @retval Returns whether there is a finger on the sensor
+ * @returns whether there is a finger on the sensor
  *
  * @warning Please note that for the function to work correctly, the DY50's touch screen must be properly configured
  */
@@ -899,7 +958,7 @@ DY50_FingerTouchState_t DY50_FingerIsOnTouch(DY50_Typedef_t *dy50)
  *
  * @param dy50  Is a pointer for dy50 handler
  *
- * @retval Returns whether the enroll flow was successful
+ * @returns whether the enroll flow was successful
  *
  */
 DY50_AckCode_t DY50_Enroll(DY50_Typedef_t *dy50)
@@ -1093,6 +1152,8 @@ void DY50_EnrollHandler(DY50_Typedef_t *dy50)
  *
  * @param dy50  Is a pointer for dy50 handler
  * @param ackCode use to check the status of the last command
+ *
+ * @retval none
  */
 __weak void DY50_EnrolResponseCallBack(DY50_Typedef_t *dy50, DY50_AckCode_t ackCode)
 {
@@ -1148,9 +1209,9 @@ __weak void DY50_EnrolResponseCallBack(DY50_Typedef_t *dy50, DY50_AckCode_t ackC
  * @param start_page_id  This refers to the page ID in the Flash database where the search begins
  * @param page_num Defines how many page IDs we will read after the start page
  *
- * @retval return if the fingerprint we were looking for was found
+ * @return if the fingerprint we were looking for was found
  *
- * @return 0x00 -> Successfull or 0x09 -> fingerprint not found
+ * @retval 0x00 -> Successfull or 0x09 -> fingerprint not found
  */
 DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t start_page_id, uint16_t page_num)
 {
@@ -1179,7 +1240,7 @@ DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, 
  * @param id_found this is the ID found by the search. If it is 0xFFFF, no match was found
  * @param math_score Returns a value from 0 to 255 indicating how closely the fingerprint matches the one found in the database
  *
- * @retval Returns whether the search was successful
+ * @returns whether the search was successful
  */
 DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 {
@@ -1287,7 +1348,15 @@ __weak void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, const DY50_Search_
 
 }
 
-
+/*
+ * @brief The main Handler of the DY50
+ *
+ * @note This is a main Handler, a state machine that controls which handler will be executed
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @retval none
+ */
 void DY50_TaskHandler(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
