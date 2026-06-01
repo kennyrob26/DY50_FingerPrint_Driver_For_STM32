@@ -1146,7 +1146,8 @@ DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, 
 	const uint8_t payload_tx_len = 5,
 		          payload_rx_len = 4;
 
-	return DY50_SendCommand_DMA(dy50, Dy50_CMD_SEARCH, payload_tx_len, payload_rx_len);
+	//return DY50_SendCommand_DMA(dy50, Dy50_CMD_SEARCH, payload_tx_len, payload_rx_len);
+	return DY50_SendCommandResponse_DMA(dy50, Dy50_CMD_SEARCH, payload_tx_len, payload_rx_len);
 }
 
 /*
@@ -1167,95 +1168,89 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 	DY50_AckCode_t ack_code = ACK_OK;
 
-	switch (dy50->search.state)
+	int16_t last_id;
+
+	if(HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin) == 0)
 	{
-		case DY50_SEARCH_STATE_IDLE:
+		switch (dy50->search.state)
+		{
+			case DY50_SEARCH_STATE_IDLE:
 
-			if((HAL_GetTick() - dy50->search.last_measuere_time) > SEARCH_MIN_TIME_BETWEEN_READING)
-			{
-				dy50->search.last_measuere_time = HAL_GetTick();
-				dy50->search.state = DY50_SEARCH_STATE_CMD_SEARCH;
-			}
-			else
-				ack_code = ACK_OK;	//There are no errors, just waiting
-			break;
-
-		case DY50_SEARCH_STATE_CMD_SEARCH:
-
-			if(HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin) == 0)
-			{
-				int16_t last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
-
-				if(last_id <= 0)
+				if((HAL_GetTick() - dy50->search.last_measuere_time) > SEARCH_MIN_TIME_BETWEEN_READING)
 				{
-					ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
-				}
-				else
-				{
-					ack_code = DY50_GenerateChar(dy50, DY50_BUFFER_ID_1);
-					if(ack_code == ACK_OK)
+					dy50->search.last_measuere_time = HAL_GetTick();
+
+					last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
+
+					if(last_id <= 0)
 					{
-						ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
-						if(ack_code == ACK_OK)
-							dy50->search.state = DY50_SEARCH_STATE_WAITING_RESPONSE;
+						ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
 					}
 					else
 					{
-						dy50->search.state = DY50_SEARCH_STATE_IDLE;
+						dy50->search.state = DY50_SEARCH_STATE_CMD_GENCHAR;
 					}
+
 				}
-			}
-			else
-			{
-				dy50->search.state = DY50_SEARCH_STATE_IDLE;
-				ack_code = ACK_ERROR;
-			}
+				else
+					ack_code = ACK_OK;	//There are no errors, just waiting
+				break;
 
-			break;
+			case DY50_SEARCH_STATE_CMD_GENCHAR:
 
-		case DY50_SEARCH_STATE_WAITING_RESPONSE:
+				ack_code = DY50_GenerateCharDMA(dy50, DY50_BUFFER_ID_1);
 
-			uint8_t callback_is_valid = 1;
-			DY50_Search_Return_t search_return = {.id_found = 0xFFFF, .math_score = 0};
-			dy50->search.state = DY50_SEARCH_STATE_COMPLETED;    //It only remains complete if it is not expecting a response
+				if(ack_code == ACK_OK)
+				{
+					dy50->search.state = DY50_SEARCH_STATE_CMD_SEARCH;
+				}
+				else if(ack_code != ACK_WATING_RESPONSE)
+				{
+					dy50->search.state = DY50_SEARCH_STATE_IDLE;
+				}
+				break;
 
-			ack_code = DY50_Wait_Command_Response(dy50);
+			case DY50_SEARCH_STATE_CMD_SEARCH:
 
-			switch (ack_code)
-			{
-				case ACK_WATING_RESPONSE:
+				last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
+				ack_code = DY50_CMD_Search(dy50, DY50_BUFFER_ID_1, 0, last_id);
+				DY50_Search_Return_t search_return = {.id_found = 0xFFFF, .math_score = 0};
 
-					dy50->search.state = DY50_SEARCH_STATE_WAITING_RESPONSE;
-					callback_is_valid = 0;
-					break;
+				uint8_t callback_is_valid = 0;
 
-				case ACK_OK:
-
+				if(ack_code == ACK_OK)
+				{
 					search_return.id_found =  ((uint16_t)dy50->uart.buf_rx.packet.payload[0]) << 8;
 					search_return.id_found |= (((uint16_t)dy50->uart.buf_rx.packet.payload[1]) & 0x00FF);
 
 					search_return.math_score = dy50->uart.buf_rx.packet.payload[3];
 
 					callback_is_valid = 1;
-					break;
-
-				case ACK_ERROR_FINGERPRINT_NOT_FOUND:
-
+				}
+				else if(ack_code == ACK_ERROR_FINGERPRINT_NOT_FOUND)
+				{
 					callback_is_valid = 1;
-					break;
-
-				default:
+					dy50->search.state = DY50_SEARCH_STATE_IDLE;
+				}
+				else if(ack_code != ACK_WATING_RESPONSE)
+				{
 					callback_is_valid = 0;
 					dy50->search.state = DY50_SEARCH_STATE_IDLE;
-					break;
-			}
+				}
 
-			if(callback_is_valid)
-				DY50_SearchResponseCallBack(dy50, &search_return);
+				if(callback_is_valid)
+					DY50_SearchResponseCallBack(dy50, &search_return);
 
-			break;
-		default:
-			break;
+				break;
+			default:
+				break;
+		}
+
+	}
+	else
+	{
+		dy50->search.state = DY50_SEARCH_STATE_IDLE;
+		ack_code = ACK_ERROR;
 	}
 
 	if(dy50->search.state == DY50_SEARCH_STATE_COMPLETED)
