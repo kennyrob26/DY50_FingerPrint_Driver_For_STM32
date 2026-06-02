@@ -37,8 +37,13 @@ DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_
 	DY50_AckCode_t code_return = ACK_OK;
 	DY50_Init_State_Machine init_status;
 
-	while((init_status != DY50_INIT_COMPLETE) || (code_return != ACK_OK))
+	uint32_t init_start_time = HAL_GetTick();
+
+	while((init_status != DY50_INIT_COMPLETE))
 	{
+		if(((HAL_GetTick() - init_start_time) > 2000) || (code_return != ACK_OK))
+			break;
+
 		switch (init_status)
 		{
 			case DY50_INIT_DEFINE_PARAMS:
@@ -49,30 +54,32 @@ DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_
 				dy50->touch.gpio.port = touch_gpio_port;
 				dy50->touch.gpio.pin  = touch_gpio_pin;
 
-				dy50->status = DY50_STATUS_IDLE;  //For uses readsystem and verify password functions
+				dy50->status = DY50_STATUS_UNINITIALIZED;  //For uses readsystem and verify password functions
 
 		        __HAL_UART_CLEAR_FEFLAG(dy50->huart);
 		        __HAL_UART_CLEAR_NEFLAG(dy50->huart);
 		        __HAL_UART_CLEAR_OREFLAG(dy50->huart);
 
 				dy50_global = dy50;
-				//HAL_UARTEx_ReceiveToIdle_DMA(dy50->huart, dy50->uart.buf_rx.raw, PAYLOAD_RX_SIZE);
 
 				code_return = ACK_OK;
 				init_status = DY50_INIT_READ_SYSTEM_PARAMS;
 				break;
 
 			case DY50_INIT_READ_SYSTEM_PARAMS:
+
 				code_return = DY50_CMD_ReadSystemParams(dy50);
+
 				if(code_return == ACK_OK)
 					init_status = DY50_INIT_VERIFY_PASSWORD;
+				break;
 
 			case DY50_INIT_VERIFY_PASSWORD:
+
 				code_return = DY50_CMD_VerifyPassword(dy50, DY50_PASSWORD);
+
 				if(code_return == ACK_OK)
-				{
 					init_status = DY50_INIT_COMPLETE;
-				}
 				break;
 
 			default:
@@ -820,12 +827,11 @@ __weak void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, const DY50_Search_
  */
 void DY50_TaskHandler(DY50_Typedef_t *dy50)
 {
-	if(dy50->status == DY50_STATUS_UNINITIALIZED)
-		return;
-
-
 	switch (dy50->status)
 	{
+		case DY50_STATUS_UNINITIALIZED:
+			//DY50_Init(dy50, dy50->huart, dy50->touch.gpio.port, dy50->touch.gpio.pin);
+			break;
 		case DY50_STATUS_ENROLL_HANDLER:
 			DY50_EnrollHandler(dy50);
 			break;

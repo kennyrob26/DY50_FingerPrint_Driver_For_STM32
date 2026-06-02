@@ -104,8 +104,13 @@ static inline void DY50_CalcCheckSum(DY50_packet_t *packet, uint16_t payload_len
  */
 DY50_AckCode_t DY50_SendCommand_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len)
 {
-	if(dy50->status == DY50_STATUS_UNINITIALIZED)
-		return ACK_ERROR_DY50_UNINITIALIZED;
+//	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+//		return ACK_ERROR_DY50_UNINITIALIZED;
+	if(dy50 == NULL)
+		return ACK_ERROR_HANDLER_NOT_DEFINED;
+	if(dy50->huart == NULL)
+		return ACK_ERROR_UART_NOT_DEFINED;
+
 
 	dy50->uart.buf_tx.packet.header      = DY50_HEADER;
 	dy50->uart.buf_tx.packet.chip_adress = DY50_ADDRESS;
@@ -149,8 +154,13 @@ DY50_AckCode_t DY50_SendCommand_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, u
  */
 DY50_AckCode_t DY50_WaitCommandResponse(DY50_Typedef_t *dy50, uint32_t timeout_response)
 {
-	if(dy50->status == DY50_STATUS_UNINITIALIZED)
-		return ACK_ERROR_DY50_UNINITIALIZED;
+//	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+//		return ACK_ERROR_DY50_UNINITIALIZED;
+	if(dy50 == NULL)
+		return ACK_ERROR_HANDLER_NOT_DEFINED;
+	if(dy50->huart == NULL)
+		return ACK_ERROR_UART_NOT_DEFINED;
+
 
 	if((HAL_GetTick() - dy50->response_time) > timeout_response)
 		return ACK_ERROR_TIMEOUT;
@@ -182,8 +192,14 @@ DY50_AckCode_t DY50_WaitCommandResponse(DY50_Typedef_t *dy50, uint32_t timeout_r
  */
 DY50_AckCode_t DY50_WaitCommandResponseBlock(DY50_Typedef_t *dy50, uint32_t timeout_response)
 {
-	if(dy50->status == DY50_STATUS_UNINITIALIZED)
-		return ACK_ERROR_DY50_UNINITIALIZED;
+//	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+//		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if(dy50 == NULL)
+		return ACK_ERROR_HANDLER_NOT_DEFINED;
+	if(dy50->huart == NULL)
+		return ACK_ERROR_UART_NOT_DEFINED;
+
 
 	DY50_AckCode_t ack_response = DY50_WaitCommandResponse(dy50, timeout_response);
 	while(ack_response == ACK_WATING_RESPONSE)
@@ -218,8 +234,12 @@ DY50_AckCode_t DY50_WaitCommandResponseBlock(DY50_Typedef_t *dy50, uint32_t time
  */
 DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len, uint32_t timeout_response)
 {
-	if(dy50->status == DY50_STATUS_UNINITIALIZED)
-		return ACK_ERROR_DY50_UNINITIALIZED;
+//	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+//		return ACK_ERROR_DY50_UNINITIALIZED;
+	if(dy50 == NULL)
+		return ACK_ERROR_HANDLER_NOT_DEFINED;
+	if(dy50->huart == NULL)
+		return ACK_ERROR_UART_NOT_DEFINED;
 
 	DY50_SendCommand_DMA(dy50, cmd, tx_payload_len, rx_payload_len);
 	return DY50_WaitCommandResponseBlock(dy50, 1000);
@@ -236,8 +256,14 @@ DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint1
  */
 DY50_AckCode_t DY50_SendCommandResponse_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len, uint32_t timeout_response)
 {
-	if(dy50->status == DY50_STATUS_UNINITIALIZED)
-		return ACK_ERROR_DY50_UNINITIALIZED;
+//	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+//		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if(dy50 == NULL)
+		return ACK_ERROR_HANDLER_NOT_DEFINED;
+	if(dy50->huart == NULL)
+		return ACK_ERROR_UART_NOT_DEFINED;
+
 
 	DY50_AckCode_t ack_code;
 
@@ -295,12 +321,18 @@ DY50_AckCode_t DY50_SendCommandResponse_DMA(DY50_Typedef_t *dy50, DY50_Commands_
  */
 DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50)
 {
-	if(dy50->status == DY50_STATUS_UNINITIALIZED)
-		return ACK_ERROR_DY50_UNINITIALIZED;
+//	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+//		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if(dy50 == NULL)
+		return ACK_ERROR_HANDLER_NOT_DEFINED;
+	if(dy50->huart == NULL)
+		return ACK_ERROR_UART_NOT_DEFINED;
+
 
 	DY50_AckCode_t ack_code;
 
-	ack_code = DY50_SendCommand(dy50, DY50_CMD_READ_SYSTEM_PARAMS, PACKET_NOT_PAYLOAD, 16, 500);
+	ack_code = DY50_SendCommand(dy50, DY50_CMD_READ_SYSTEM_PARAMS, PACKET_NOT_PAYLOAD, 16, 100);
 
 	if(ack_code == ACK_OK)
 	{
@@ -328,15 +360,20 @@ DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50)
  */
 DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
 {
-	if(dy50->status == DY50_STATUS_UNINITIALIZED)
-		return ACK_ERROR_DY50_UNINITIALIZED;
+//	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+//		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if(dy50 == NULL)
+		return ACK_ERROR_HANDLER_NOT_DEFINED;
+	if(dy50->huart == NULL)
+		return ACK_ERROR_UART_NOT_DEFINED;
 
 	dy50->uart.buf_tx.packet.payload[0] = (uint8_t)((password >> 24) & 0x000000FF);
 	dy50->uart.buf_tx.packet.payload[1] = (uint8_t)((password >> 16) & 0x000000FF);
 	dy50->uart.buf_tx.packet.payload[2] = (uint8_t)((password >> 8)  & 0x000000FF);
 	dy50->uart.buf_tx.packet.payload[3] = (uint8_t)(password  & 0x000000FF);
 
-	return DY50_SendCommand(dy50, DY50_CMD_VERIFY_PASSWORD, 4, PACKET_NOT_PAYLOAD, 500);
+	return DY50_SendCommand(dy50, DY50_CMD_VERIFY_PASSWORD, 4, PACKET_NOT_PAYLOAD, 100);
 }
 
 
@@ -362,8 +399,13 @@ DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
  */
 DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTable[], uint8_t size)
 {
-	if(dy50->status == DY50_STATUS_UNINITIALIZED)
-		return ACK_ERROR_DY50_UNINITIALIZED;
+//	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+//		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if(dy50 == NULL)
+		return ACK_ERROR_HANDLER_NOT_DEFINED;
+	if(dy50->huart == NULL)
+		return ACK_ERROR_UART_NOT_DEFINED;
 
 	const uint8_t page_size = 32; //based on the datasheet, each page is 32 bytes
 	const uint8_t tx_payload_size = 1;
@@ -372,7 +414,7 @@ DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTa
 
 	//Get page 0
 	dy50->uart.buf_tx.packet.payload[0] = 0x00;
-	code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size, 500);
+	code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size, 200);
 
 	if(size >= page_size)
 		memcpy(readIndexTable, dy50->uart.buf_rx.packet.payload, page_size);
@@ -385,7 +427,7 @@ DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTa
 		if(size > page_size)
 		{
 			dy50->uart.buf_tx.packet.payload[0] = 0x01;
-			code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size, 500);
+			code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size, 200);
 
 			uint8_t remaining_bytes = (size - 32);
 
