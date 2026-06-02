@@ -35,7 +35,7 @@ DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_
 
 
 	DY50_AckCode_t code_return = ACK_OK;
-	DY50_Init_State_Machine init_status;
+	DY50_Init_State_Machine init_status = DY50_INIT_DEFINE_PARAMS;
 
 	uint32_t init_start_time = HAL_GetTick();
 
@@ -94,6 +94,22 @@ DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_
 
 	return code_return;
 
+}
+
+DY50_AckCode_t  DY50_ReInit(DY50_Typedef_t *dy50)
+{
+	if((dy50 == NULL) || (dy50->huart == NULL) || (dy50->touch.gpio.port == NULL))
+		return ACK_ERROR;
+
+	HAL_UART_DMAStop(dy50->huart); //Pause DMA Receive
+
+    volatile uint32_t clerar_rdr_register;
+	while ((dy50->huart->Instance->ISR & UART_FLAG_RXNE) == UART_FLAG_RXNE)
+	{
+		clerar_rdr_register = dy50->huart->Instance->RDR; // consumes the data to clear the register
+	}
+
+	return (DY50_Init(dy50, dy50->huart, dy50->touch.gpio.port, dy50->touch.gpio.pin));
 }
 
 
@@ -830,7 +846,7 @@ void DY50_TaskHandler(DY50_Typedef_t *dy50)
 	switch (dy50->status)
 	{
 		case DY50_STATUS_UNINITIALIZED:
-			//DY50_Init(dy50, dy50->huart, dy50->touch.gpio.port, dy50->touch.gpio.pin);
+			DY50_ReInit(dy50);
 			break;
 		case DY50_STATUS_ENROLL_HANDLER:
 			DY50_EnrollHandler(dy50);
