@@ -60,6 +60,8 @@ typedef enum
 
 	ACK_ERROR_FINGERPRINT_NOT_FOUND = 0x09,		//In Search Command
 
+	ACK_ERROR_MUTEX_IS_LOCK       = 241,
+
 	ACK_WATING_RESPONSE           = 242,
 
 	ACK_ERROR                     = 243,
@@ -211,10 +213,18 @@ typedef enum
 	DY50_STATUS_SEARCH_FINGERPRINT = 3,
 }DY50_Status_t;
 
+typedef enum
+{
+	DY50_MUTEX_IS_FREE     = 0x00,
+	DY50_MUTEX_ENROLL_LOCK = 0x01,
+	DY50_MUTEX_SEARCH_LOCK = 0x02,
+}DY50_Mutex_Status_t;
+
 typedef struct
 {
 	UART_HandleTypeDef *huart;
 	DY50_Status_t status;
+	DY50_Mutex_Status_t mutex;
 	DY50_Info_t info;
 
 	DY50_Touch_Info_t touch;

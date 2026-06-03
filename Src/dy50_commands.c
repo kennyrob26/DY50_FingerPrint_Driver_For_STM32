@@ -589,3 +589,55 @@ DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, 
 	//return DY50_SendCommand_DMA(dy50, Dy50_CMD_SEARCH, payload_tx_len, payload_rx_len);
 	return DY50_SendCommandResponse_DMA(dy50, Dy50_CMD_SEARCH, payload_tx_len, payload_rx_len, 500);
 }
+
+uint8_t DY50_Mutex_Acquire(DY50_Typedef_t *dy50, DY50_Mutex_Status_t owner)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if(dy50->mutex == DY50_MUTEX_IS_FREE)
+	{
+		dy50->mutex = owner;
+		return 1;
+	}
+	else if(dy50->mutex == owner)
+	{
+		return 1;
+	}
+
+	return 0;
+}
+
+void DY50_Mutex_Release(DY50_Typedef_t *dy50, DY50_Mutex_Status_t owner)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if(dy50->mutex == owner)
+	{
+		dy50->mutex = DY50_MUTEX_IS_FREE;
+	}
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
