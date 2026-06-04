@@ -875,10 +875,65 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 }
 
+
 __weak void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, const DY50_Search_Return_t *search_return)
 {
 
 }
+
+DY50_AckCode_t DY50_DeleteTemplateId(DY50_Typedef_t *dy50, uint16_t id)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if(id >= dy50->info.database_capacity)
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	DY50_AckCode_t ack_code = DY50_ChageStatus(dy50, DY50_STATUS_DELETE_TEMPLATE);
+
+	if(ack_code == ACK_OK)
+	{
+		dy50->delete.id = id;
+		dy50->delete.num_of_templates = 1;
+	}
+
+	return ack_code;
+
+}
+
+DY50_AckCode_t DY50_DeleteTemplateHandler(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if((dy50->delete.id >= dy50->info.database_capacity) || dy50->delete.num_of_templates == 0)
+	{
+		dy50->status = DY50_STATUS_IDLE;
+		return ACK_ERROR_INVALID_PARAMETER;
+	}
+
+	DY50_AckCode_t ack_code;
+
+	if(DY50_Mutex_Acquire(dy50, DY50_MUTEX_DELETE_LOCK))
+	{
+		ack_code = DY50_CMD_DeletChar_DMA(dy50, dy50->delete.id, dy50->delete.num_of_templates);
+
+		if(ack_code != ACK_WATING_RESPONSE)
+		{
+			if(ack_code == ACK_OK)
+				DY50_SetIndexTable(dy50, dy50->delete.id, 0);
+			dy50->status = DY50_STATUS_IDLE;
+			DY50_Mutex_Release(dy50, DY50_MUTEX_DELETE_LOCK);
+		}
+	}
+	else
+	{
+		ack_code = ACK_ERROR_MUTEX_IS_LOCK;
+	}
+
+	return ack_code;
+}
+
 
 /*
  * @brief The main Handler of the DY50
@@ -901,6 +956,9 @@ void DY50_TaskHandler(DY50_Typedef_t *dy50)
 			break;
 		case DY50_STATUS_SEARCH_FINGERPRINT:
 			DY50_SearchFingerPrint(dy50);
+			break;
+		case DY50_STATUS_DELETE_TEMPLATE:
+			DY50_DeleteTemplateHandler(dy50);
 			break;
 		default:
 			dy50->touch.flag = 0;

@@ -85,6 +85,7 @@ typedef enum
 	Dy50_CMD_SEARCH             =  0x04,
 	DY50_CMD_REG_MODEL 			=  0x05,
 	DY50_CMD_STORE_CHAR         =  0x06,
+	DY50_CMD_DELETE_CHAR        =  0x0C,
 	DY50_CMD_VERIFY_PASSWORD 	=  0x13,
 	DY50_CMD_READ_SYSTEM_PARAMS =  0x0F,
 	DY50_CMD_READ_INDEX_TABLE   =  0x1F
@@ -182,7 +183,6 @@ typedef struct
 }DY50_Enroll_t;
 
 
-
 typedef struct
 {
 	DY50_SearchState_t state;
@@ -194,6 +194,20 @@ typedef struct
 	uint16_t id_found;
 	uint8_t math_score;
 }DY50_Search_Return_t;
+
+typedef enum
+{
+	DY50_DELETE_HANDLER_STATE_IDLE        = 0,
+	DY50_DELETE_HANDLER_STATE_INITIALIZED,
+}DY50_DeleteHandler_State_t;
+
+typedef struct
+{
+	DY50_DeleteHandler_State_t state;
+	uint16_t id;
+	uint16_t num_of_templates;
+}DY50_Delete_t;
+
 
 typedef struct
 {
@@ -211,6 +225,7 @@ typedef enum
 	DY50_STATUS_IDLE               = 1,
 	DY50_STATUS_ENROLL_HANDLER     = 2,
 	DY50_STATUS_SEARCH_FINGERPRINT = 3,
+	DY50_STATUS_DELETE_TEMPLATE    = 4,
 }DY50_Status_t;
 
 typedef enum
@@ -218,6 +233,7 @@ typedef enum
 	DY50_MUTEX_IS_FREE     = 0x00,
 	DY50_MUTEX_ENROLL_LOCK = 0x01,
 	DY50_MUTEX_SEARCH_LOCK = 0x02,
+	DY50_MUTEX_DELETE_LOCK = 0x03,
 }DY50_Mutex_Status_t;
 
 typedef struct
@@ -238,6 +254,7 @@ typedef struct
 	DY50_GenerateChar_Status_t genchar_status;
 	DY50_Enroll_t enroll;
 	DY50_Search_t search;
+	DY50_Delete_t delete;
 
 }DY50_Typedef_t;
 

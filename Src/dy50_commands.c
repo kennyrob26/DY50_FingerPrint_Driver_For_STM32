@@ -611,7 +611,7 @@ uint8_t DY50_Mutex_Acquire(DY50_Typedef_t *dy50, DY50_Mutex_Status_t owner)
 void DY50_Mutex_Release(DY50_Typedef_t *dy50, DY50_Mutex_Status_t owner)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
-		return ACK_ERROR_DY50_UNINITIALIZED;
+		return;
 
 	if(dy50->mutex == owner)
 	{
@@ -622,6 +622,25 @@ void DY50_Mutex_Release(DY50_Typedef_t *dy50, DY50_Mutex_Status_t owner)
 }
 
 
+DY50_AckCode_t DY50_CMD_DeletChar_DMA(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t num_of_templates)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+			return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if(num_of_templates == 0 || ((start_id + num_of_templates) > dy50->info.database_capacity))
+		return ACK_ERROR_INVALID_PARAMETER;
+
+
+	dy50->uart.buf_tx.packet.payload[0] = (uint8_t)((start_id >> 8) & 0x00FF);
+	dy50->uart.buf_tx.packet.payload[1] = (uint8_t)(start_id & 0x00FF);
+	dy50->uart.buf_tx.packet.payload[2] = (uint8_t)((num_of_templates >> 8) & 0x00FF);
+	dy50->uart.buf_tx.packet.payload[3] = (uint8_t)(num_of_templates & 0x00FF);
+
+	const uint8_t payload_tx_len = 4,
+				  payload_rx_len = PACKET_NOT_PAYLOAD;
+
+	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_DELETE_CHAR, payload_tx_len, payload_rx_len, 500);
+}
 
 
 
