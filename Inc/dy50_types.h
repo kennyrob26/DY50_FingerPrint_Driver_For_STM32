@@ -57,6 +57,7 @@ typedef enum
 	ACK_ERROR_IMAGE_IS_TOO_BLURRY = 0x05,
 	ACK_ERROR_IMAGE_IS_AMORPHOUS  = 0x06,
 	ACK_ERROR_IMAGE_IS_TOO_LITTLE = 0x07,
+	ACK_ERROR_DELETE_FAIL         = 0x10,
 
 	ACK_ERROR_FINGERPRINT_NOT_FOUND = 0x09,		//In Search Command
 
@@ -195,6 +196,23 @@ typedef struct
 	uint8_t math_score;
 }DY50_Search_Return_t;
 
+typedef struct
+{
+	DY50_EnrollState_t last_state;
+}DY50_Enroll_Return_t;
+
+typedef union
+{
+	DY50_Search_Return_t search;
+	DY50_Enroll_Return_t enroll;
+}DY50_Event_Data_t;
+
+typedef struct
+{
+	DY50_AckCode_t ack_code;
+	DY50_Event_Data_t data;
+}DY50_Event_Info_t;
+
 typedef enum
 {
 	DY50_DELETE_HANDLER_STATE_IDLE        = 0,
@@ -242,6 +260,8 @@ typedef struct
 	DY50_Status_t status;
 	DY50_Mutex_Status_t mutex;
 	DY50_Info_t info;
+
+	DY50_Event_Info_t event;
 
 	DY50_Touch_Info_t touch;
 

@@ -1001,8 +1001,10 @@ DY50_AckCode_t DY50_ChageStatus(DY50_Typedef_t *dy50, DY50_Status_t new_status)
 	return ack_code;
 }
 
+__weak void DY50_EventCallback(DY50_Typedef_t *dy50, DY50_Status_t event)
+{
 
-
+}
 
 
 
