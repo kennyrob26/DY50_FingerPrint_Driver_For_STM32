@@ -35,6 +35,7 @@ void DY50_EnrolResponseCallBack(DY50_Typedef_t *dy50, DY50_AckCode_t ackCode);
 DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50);
 void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, const DY50_Search_Return_t *search_return);
 
+DY50_AckCode_t DY50_DeleteTemplates(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t num_of_templates);
 DY50_AckCode_t DY50_DeleteTemplateId(DY50_Typedef_t *dy50, uint16_t id);
 DY50_AckCode_t DY50_DeleteTemplateHandler(DY50_Typedef_t *dy50);
 

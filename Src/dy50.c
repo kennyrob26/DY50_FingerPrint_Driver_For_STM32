@@ -881,6 +881,25 @@ __weak void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, const DY50_Search_
 
 }
 
+DY50_AckCode_t DY50_DeleteTemplates(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t num_of_templates)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if(num_of_templates == 0 || ((start_id + num_of_templates) > dy50->info.database_capacity))
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	DY50_AckCode_t ack_code = DY50_ChageStatus(dy50, DY50_STATUS_DELETE_TEMPLATE);
+
+	if(ack_code == ACK_OK)
+	{
+		dy50->delete.id = start_id;
+		dy50->delete.num_of_templates = num_of_templates;
+	}
+
+	return ack_code;
+}
+
 DY50_AckCode_t DY50_DeleteTemplateId(DY50_Typedef_t *dy50, uint16_t id)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
@@ -889,17 +908,12 @@ DY50_AckCode_t DY50_DeleteTemplateId(DY50_Typedef_t *dy50, uint16_t id)
 	if(id >= dy50->info.database_capacity)
 		return ACK_ERROR_INVALID_PARAMETER;
 
-	DY50_AckCode_t ack_code = DY50_ChageStatus(dy50, DY50_STATUS_DELETE_TEMPLATE);
-
-	if(ack_code == ACK_OK)
-	{
-		dy50->delete.id = id;
-		dy50->delete.num_of_templates = 1;
-	}
-
-	return ack_code;
+	return DY50_DeleteTemplates(dy50, id, 1);
 
 }
+
+
+
 
 DY50_AckCode_t DY50_DeleteTemplateHandler(DY50_Typedef_t *dy50)
 {
