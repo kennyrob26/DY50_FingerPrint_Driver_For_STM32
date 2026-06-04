@@ -1003,7 +1003,83 @@ DY50_AckCode_t DY50_ChageStatus(DY50_Typedef_t *dy50, DY50_Status_t new_status)
 
 __weak void DY50_EventCallback(DY50_Typedef_t *dy50, DY50_Status_t event)
 {
+	if(dy50->event.ack_code != ACK_OK)
+	{
+		switch (dy50->event.ack_code)
+		{
+		case ACK_ERROR_NOT_FINGER:
+			//ERROR not finger in module
+			break;
+		case ACK_ERROR_IMAGE_IS_TOO_LIGHT:
+			//ERROR bad image (too LIGHT)
+			break;
+		case ACK_ERROR_IMAGE_IS_TOO_BLURRY:
+			//ERROR bad image (too blurry)
+			break;
+		case ACK_ERROR_IMAGE_IS_AMORPHOUS:
+			//ERROR bad image (amorphous)
+			break;
+		case ACK_ERROR_IMAGE_IS_TOO_LITTLE:
+			//ERROR bad image (too little)
+			break;
 
+		//The idea is for you to address any errors you deem necessary
+
+		default:
+			//Other erros
+			break;
+		}
+	}
+	else if(dy50->event.ack_code == ACK_OK)
+	{
+
+		switch (event)
+		{
+			case DY50_STATUS_ENROLL_HANDLER:
+
+				switch (dy50->enroll.last_state)
+				{
+				  case DY50_ENROLL_STATE_WRITE_BUFFER1:
+				  case DY50_ENROLL_STATE_WRITE_BUFFER2:
+				  case DY50_ENROLL_STATE_WRITE_BUFFER3:
+				  case DY50_ENROLL_STATE_WRITE_BUFFER4:
+					  //Event case write buffer
+					  break;
+
+				  case DY50_ENROLL_STATE_COMPLETE:
+					  //Event case write buffer and RegModel ok
+					  break;
+
+				  case DY50_ENROLL_STATE_IDLE:
+					  //Fatal ERROR, write buffer ok, but RegModel Fail
+					  break;
+				  default:
+					  break;
+
+				}
+
+			case DY50_STATUS_SEARCH_FINGERPRINT:
+
+				uint16_t fingerprint_id = dy50->event.data.search.id_found;
+				uint16_t math_score = dy50->event.data.search.math_score;
+
+				if(fingerprint_id != 0xFFFF && math_score > 0)
+				{
+					//fingerprint exist
+				}
+				else
+				{
+					//fingerprint not exist
+				}
+				break;
+
+			case DY50_STATUS_DELETE_TEMPLATE:
+				//Delete successfully
+				break;
+			default:
+				break;
+		}
+	}
 }
 
 
