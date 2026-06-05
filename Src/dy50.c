@@ -79,9 +79,14 @@ DY50_AckCode_t  DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_
 				code_return = DY50_CMD_VerifyPassword(dy50, DY50_PASSWORD);
 
 				if(code_return == ACK_OK)
+					init_status = DY50_INIT_READ_INDEX_TABLE;
+				break;
+			case DY50_INIT_READ_INDEX_TABLE:
+
+				code_return = DY50_CMD_ReadIndexTable(dy50, dy50->info.table_index, sizeof(dy50->info.table_index));
+				if(code_return == ACK_OK)
 					init_status = DY50_INIT_COMPLETE;
 				break;
-
 			default:
 				break;
 		}
@@ -599,7 +604,10 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 						}
 					}
 
-					DY50_EnrolResponseCallBack(dy50, ack_code);
+					//DY50_EnrolResponseCallBack(dy50, ack_code);
+					dy50->event.ack_code = ack_code;
+					dy50->event.data.enroll.last_state = dy50->enroll.last_state;
+					DY50_EventCallback(dy50, DY50_STATUS_ENROLL_HANDLER);
 
 					if(dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE)
 					{
@@ -645,62 +653,6 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 
 
 	return ack_code;
-}
-
-/*
- * @brief Enroll Callback
- *
- * @note Weak function example, you must implement the strong function that overrides it
- *
- * @warning This function is called by the DY50 Enroll Handler
- *
- * @param dy50  Is a pointer for dy50 handler
- * @param ackCode use to check the status of the last command
- *
- * @retval none
- */
-__weak void DY50_EnrolResponseCallBack(DY50_Typedef_t *dy50, DY50_AckCode_t ackCode)
-{
-
-	switch (ackCode) {
-		case ACK_OK:
-			switch (dy50->enroll.last_state)
-			{
-			  case DY50_ENROLL_STATE_WRITE_BUFFER1:
-			  case DY50_ENROLL_STATE_WRITE_BUFFER2:
-			  case DY50_ENROLL_STATE_WRITE_BUFFER3:
-			  case DY50_ENROLL_STATE_WRITE_BUFFER4:
-
-				  //Event case write buffer
-
-				  break;
-
-			  case DY50_ENROLL_STATE_COMPLETE:
-
-				  //Event case write buffer and RegModel ok
-				  break;
-
-			  case DY50_ENROLL_STATE_IDLE:
-				  //Fatal ERROR, write buffer ok, but RegModel Fail
-				  break;
-			  default:
-				  break;
-
-			}
-			break;
-		case ACK_ERROR_NOT_FINGER:
-			//ERROR not finger in module
-			break;
-		case ACK_ERROR_IMAGE_IS_AMORPHOUS:
-			//ERROR bad image (too amorphous)
-			break;
-		case ACK_ERROR_IMAGE_IS_TOO_LITTLE:
-			//ERROR bad image (too little)
-			break;
-		default:
-			break;
-	}
-
 }
 
 /*
@@ -848,7 +800,11 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 				if(callback_is_valid)
 				{
-					DY50_SearchResponseCallBack(dy50, &search_return);
+					//DY50_SearchResponseCallBack(dy50, &search_return);
+
+					dy50->event.data.search.id_found = search_return.id_found;
+					dy50->event.data.search.math_score = search_return.math_score;
+					DY50_EventCallback(dy50, DY50_STATUS_SEARCH_FINGERPRINT);
 
 					DY50_Mutex_Release(dy50, DY50_MUTEX_SEARCH_LOCK);
 				}
@@ -875,11 +831,6 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 }
 
-
-__weak void DY50_SearchResponseCallBack(DY50_Typedef_t *dy50, const DY50_Search_Return_t *search_return)
-{
-
-}
 
 DY50_AckCode_t DY50_DeleteTemplates(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t num_of_templates)
 {
@@ -912,7 +863,21 @@ DY50_AckCode_t DY50_DeleteTemplateId(DY50_Typedef_t *dy50, uint16_t id)
 
 }
 
+DY50_AckCode_t Dy50_DeleteAllTemplates(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
 
+	DY50_AckCode_t ack_code = DY50_ChageStatus(dy50, DY50_STATUS_DELETE_TEMPLATE);
+
+	if(ack_code == ACK_OK)
+	{
+		dy50->delete.id = 0;
+		dy50->delete.num_of_templates = (dy50->info.database_capacity - 1);
+	}
+
+	return ack_code;
+}
 
 
 DY50_AckCode_t DY50_DeleteTemplateHandler(DY50_Typedef_t *dy50)
@@ -930,15 +895,30 @@ DY50_AckCode_t DY50_DeleteTemplateHandler(DY50_Typedef_t *dy50)
 
 	if(DY50_Mutex_Acquire(dy50, DY50_MUTEX_DELETE_LOCK))
 	{
-		ack_code = DY50_CMD_DeletChar_DMA(dy50, dy50->delete.id, dy50->delete.num_of_templates);
-
-		if(ack_code != ACK_WATING_RESPONSE)
+		if((dy50->delete.id == 0) && (dy50->delete.num_of_templates == (dy50->info.database_capacity - 1)))
 		{
-			if(ack_code == ACK_OK)
-				DY50_SetIndexTable(dy50, dy50->delete.id, 0);
-			dy50->status = DY50_STATUS_IDLE;
-			DY50_Mutex_Release(dy50, DY50_MUTEX_DELETE_LOCK);
+			ack_code = DY50_CMD_Empty_DMA(dy50);
+			if(ack_code != ACK_WATING_RESPONSE)
+			{
+				if(ack_code == ACK_OK)
+					DY50_CMD_ReadIndexTable(dy50, dy50->info.table_index, sizeof(dy50->info.table_index));
+				dy50->status = DY50_STATUS_IDLE;
+				DY50_Mutex_Release(dy50, DY50_MUTEX_DELETE_LOCK);
+			}
 		}
+		else
+		{
+			ack_code = DY50_CMD_DeletChar_DMA(dy50, dy50->delete.id, dy50->delete.num_of_templates);
+
+			if(ack_code != ACK_WATING_RESPONSE)
+			{
+				if(ack_code == ACK_OK)
+					DY50_SetIndexTable(dy50, dy50->delete.id, 0);
+				dy50->status = DY50_STATUS_IDLE;
+				DY50_Mutex_Release(dy50, DY50_MUTEX_DELETE_LOCK);
+			}
+		}
+
 	}
 	else
 	{

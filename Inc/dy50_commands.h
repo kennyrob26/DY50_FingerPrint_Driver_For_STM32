@@ -38,4 +38,6 @@ DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, 
 uint8_t DY50_Mutex_Acquire(DY50_Typedef_t *dy50, DY50_Mutex_Status_t owner);
 void DY50_Mutex_Release(DY50_Typedef_t *dy50, DY50_Mutex_Status_t owner);
 DY50_AckCode_t DY50_CMD_DeletChar_DMA(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t num_of_templates);
+DY50_AckCode_t DY50_CMD_Empty_DMA(DY50_Typedef_t *dy50);
+DY50_AckCode_t DY50_CMD_GetRandomCode_DMA(DY50_Typedef_t *dy50);
 #endif /* DY50_FINGERPRINT_DRIVER_FOR_STM32_INC_DY50_COMMANDS_H_ */

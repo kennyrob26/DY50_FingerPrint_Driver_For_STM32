@@ -564,6 +564,7 @@ DY50_AckCode_t DY50_CMD_RegModel(DY50_Typedef_t *dy50)
  * @note Search for a fingerprint in the DY50 flash database. Use this function to check if the fingerprint image
  *       we just read exists in the DY50 database.
  *
+ * @param dy50  Is a pointer for dy50 handler
  * @param buffer_id is the CharBufferID where the image is located (usually it will be 1)
  * @param start_page_id  This refers to the page ID in the Flash database where the search begins
  * @param page_num Defines how many page IDs we will read after the start page
@@ -642,12 +643,43 @@ DY50_AckCode_t DY50_CMD_DeletChar_DMA(DY50_Typedef_t *dy50, uint16_t start_id, u
 	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_DELETE_CHAR, payload_tx_len, payload_rx_len, 500);
 }
 
+DY50_AckCode_t DY50_CMD_Empty(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+			return ACK_ERROR_DY50_UNINITIALIZED;
+
+	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_EMPTY, PAYLOAD_TX_SIZE, PAYLOAD_RX_SIZE, 500);
+}
+
+/*
+ * @brief Generate a random code (4 bytes)
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @returns whether the random code was generated successfully
+ */
+DY50_AckCode_t DY50_CMD_GetRandomCode_DMA(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	const uint8_t payload_tx_len = PACKET_NOT_PAYLOAD,
+				  payload_rx_len = 4;
+
+	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_GET_RANDOM_CODE, payload_tx_len, payload_rx_len, 200);
+}
 
 
+DY50_AckCode_t DY50_CMD_ValidTemplateNum_DMA(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
 
+	const uint8_t payload_tx_len = PACKET_NOT_PAYLOAD,
+				  payload_rx_len = 2;
 
-
-
+	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_VALID_TEMPLATE_NUM, payload_tx_len, payload_rx_len, 200);
+}
 
 
 
