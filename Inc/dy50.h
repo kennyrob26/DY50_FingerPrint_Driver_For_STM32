@@ -19,7 +19,7 @@
 
 DY50_AckCode_t DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *touch_gpio_port, uint16_t touch_gpio_pin);
 DY50_AckCode_t  DY50_ReInit(DY50_Typedef_t *dy50);
-DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value);
+
 int16_t DY50_FindFirstFreeIDInIndexTable(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_GenerateChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id);
 DY50_AckCode_t DY50_GenerateCharDMA(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id);

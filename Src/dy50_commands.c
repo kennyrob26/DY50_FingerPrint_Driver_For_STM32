@@ -102,7 +102,7 @@ static inline void DY50_CalcCheckSum(DY50_packet_t *packet, uint16_t payload_len
  *
  * @return whether the command was SENT successfully
  */
-DY50_AckCode_t DY50_SendCommand_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len)
+DY50_AckCode_t DY50_SendCommand_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd)
 {
 //	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 //		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -119,11 +119,11 @@ DY50_AckCode_t DY50_SendCommand_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, u
 
 	const uint8_t code_len     = 1;
 	const uint8_t checksum_len = 2;
-	uint8_t packet_length = code_len + tx_payload_len + checksum_len;
+	uint8_t packet_length = code_len + dy50->uart.tx_payload_len + checksum_len;
 
 	dy50->uart.buf_tx.packet.length  = SWAP16(packet_length);
 
-	DY50_CalcCheckSum(&dy50->uart.buf_tx.packet, tx_payload_len);
+	DY50_CalcCheckSum(&dy50->uart.buf_tx.packet, dy50->uart.tx_payload_len);
 
 	const uint8_t size_fix_bytes = 9; //header + address + flag + length
 	uint16_t size_total_bytes = size_fix_bytes + packet_length;
@@ -131,7 +131,7 @@ DY50_AckCode_t DY50_SendCommand_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, u
 	dy50->uart.dma_flag = 0;
 	__HAL_UART_CLEAR_OREFLAG(dy50->huart);
 
-	HAL_UART_Receive_DMA(dy50->huart, dy50->uart.buf_rx.raw, (ACK_PACKET_SIZE + rx_payload_len));
+	HAL_UART_Receive_DMA(dy50->huart, dy50->uart.buf_rx.raw, (ACK_PACKET_SIZE + dy50->uart.rx_payload_len));
 
 	if(HAL_UART_Transmit(dy50->huart, dy50->uart.buf_tx.raw, size_total_bytes, 100) != HAL_OK)
 		return ACK_ERROR_UART_TX;
@@ -152,7 +152,7 @@ DY50_AckCode_t DY50_SendCommand_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, u
  *
  * @return whether command response is Valid
  */
-DY50_AckCode_t DY50_WaitCommandResponse(DY50_Typedef_t *dy50, uint32_t timeout_response)
+DY50_AckCode_t DY50_Async_WaitCommandResponse(DY50_Typedef_t *dy50, uint32_t timeout_response)
 {
 //	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 //		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -190,7 +190,7 @@ DY50_AckCode_t DY50_WaitCommandResponse(DY50_Typedef_t *dy50, uint32_t timeout_r
  *
  * @return whether command response is Valid
  */
-DY50_AckCode_t DY50_WaitCommandResponseBlock(DY50_Typedef_t *dy50, uint32_t timeout_response)
+DY50_AckCode_t DY50_Sync_WaitCommandResponse(DY50_Typedef_t *dy50, uint32_t timeout_response)
 {
 //	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 //		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -201,10 +201,10 @@ DY50_AckCode_t DY50_WaitCommandResponseBlock(DY50_Typedef_t *dy50, uint32_t time
 		return ACK_ERROR_UART_NOT_DEFINED;
 
 
-	DY50_AckCode_t ack_response = DY50_WaitCommandResponse(dy50, timeout_response);
+	DY50_AckCode_t ack_response = DY50_Async_WaitCommandResponse(dy50, timeout_response);
 	while(ack_response == ACK_WATING_RESPONSE)
 	{
-		ack_response = DY50_WaitCommandResponse(dy50, timeout_response);
+		ack_response = DY50_Async_WaitCommandResponse(dy50, timeout_response);
 		//Block code waiting response
 	}
 
@@ -232,7 +232,7 @@ DY50_AckCode_t DY50_WaitCommandResponseBlock(DY50_Typedef_t *dy50, uint32_t time
  * @returns whether the command was successful
  *
  */
-DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len, uint32_t timeout_response)
+DY50_AckCode_t DY50_Sync_SendCommand_Wait_Response(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint32_t timeout_response)
 {
 //	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 //		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -241,8 +241,8 @@ DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint1
 	if(dy50->huart == NULL)
 		return ACK_ERROR_UART_NOT_DEFINED;
 
-	DY50_SendCommand_DMA(dy50, cmd, tx_payload_len, rx_payload_len);
-	return DY50_WaitCommandResponseBlock(dy50, 1000);
+	DY50_SendCommand_DMA(dy50, cmd);
+	return DY50_Sync_WaitCommandResponse(dy50, 1000);
 }
 
 /*
@@ -254,7 +254,7 @@ DY50_AckCode_t DY50_SendCommand(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint1
  * @param rx_payload_len It is the payload capacity of the receiving
  * @param timeout_response Set a maximum waiting time for the response
  */
-DY50_AckCode_t DY50_SendCommandResponse_DMA(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint16_t tx_payload_len, uint16_t rx_payload_len, uint32_t timeout_response)
+DY50_AckCode_t DY50_Async_SendCommand_Wait_Response(DY50_Typedef_t *dy50, DY50_Commands_t cmd, uint32_t timeout_response)
 {
 //	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 //		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -274,7 +274,7 @@ DY50_AckCode_t DY50_SendCommandResponse_DMA(DY50_Typedef_t *dy50, DY50_Commands_
 
 			dy50->uart.dma_flag = 0;
 
-			ack_code = DY50_SendCommand_DMA(dy50, cmd, tx_payload_len, rx_payload_len);
+			ack_code = DY50_SendCommand_DMA(dy50, cmd);
 
 			if(ack_code == ACK_OK)
 			{
@@ -287,7 +287,7 @@ DY50_AckCode_t DY50_SendCommandResponse_DMA(DY50_Typedef_t *dy50, DY50_Commands_
 
 		case DY50_CMD_DMA_STATUS_WAITING:
 
-			ack_code = DY50_WaitCommandResponse(dy50, timeout_response);
+			ack_code = DY50_Async_WaitCommandResponse(dy50, timeout_response);
 
 			switch (ack_code)
 			{
@@ -319,7 +319,7 @@ DY50_AckCode_t DY50_SendCommandResponse_DMA(DY50_Typedef_t *dy50, DY50_Commands_
  *
  * @retval Returns whether it was possible to obtain the data
  */
-DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50)
+DY50_AckCode_t DY50_Sync_CMD_ReadSystemParams(DY50_Typedef_t *dy50)
 {
 //	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 //		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -332,7 +332,10 @@ DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50)
 
 	DY50_AckCode_t ack_code;
 
-	ack_code = DY50_SendCommand(dy50, DY50_CMD_READ_SYSTEM_PARAMS, PACKET_NOT_PAYLOAD, 16, 100);
+	dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD;
+	dy50->uart.rx_payload_len = 16;
+
+	ack_code = DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_READ_SYSTEM_PARAMS, 100);
 
 	if(ack_code == ACK_OK)
 	{
@@ -358,7 +361,7 @@ DY50_AckCode_t DY50_CMD_ReadSystemParams(DY50_Typedef_t *dy50)
  *
  * @retval Returns whether the password was verified
  */
-DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
+DY50_AckCode_t DY50_Sync_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
 {
 //	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 //		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -373,7 +376,10 @@ DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
 	dy50->uart.buf_tx.packet.payload[2] = (uint8_t)((password >> 8)  & 0x000000FF);
 	dy50->uart.buf_tx.packet.payload[3] = (uint8_t)(password  & 0x000000FF);
 
-	return DY50_SendCommand(dy50, DY50_CMD_VERIFY_PASSWORD, 4, PACKET_NOT_PAYLOAD, 100);
+	dy50->uart.tx_payload_len = 4;
+	dy50->uart.rx_payload_len = PACKET_NOT_PAYLOAD;
+
+	return DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_VERIFY_PASSWORD, 100);
 }
 
 
@@ -397,7 +403,7 @@ DY50_AckCode_t DY50_CMD_VerifyPassword(DY50_Typedef_t *dy50, uint32_t password)
  * 	@returns whether it was possible to read the index table
  *
  */
-DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTable[], uint8_t size)
+DY50_AckCode_t DY50_Sync_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTable[], uint8_t size)
 {
 //	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 //		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -408,13 +414,15 @@ DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTa
 		return ACK_ERROR_UART_NOT_DEFINED;
 
 	const uint8_t page_size = 32; //based on the datasheet, each page is 32 bytes
-	const uint8_t tx_payload_size = 1;
+
+	dy50->uart.tx_payload_len = 1;
+	dy50->uart.rx_payload_len = page_size;
 
 	DY50_AckCode_t code_ack;
 
 	//Get page 0
 	dy50->uart.buf_tx.packet.payload[0] = 0x00;
-	code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size, 200);
+	code_ack = DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_READ_INDEX_TABLE, 200);
 
 	if(size >= page_size)
 		memcpy(readIndexTable, dy50->uart.buf_rx.packet.payload, page_size);
@@ -427,7 +435,7 @@ DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTa
 		if(size > page_size)
 		{
 			dy50->uart.buf_tx.packet.payload[0] = 0x01;
-			code_ack = DY50_SendCommand(dy50, DY50_CMD_READ_INDEX_TABLE, tx_payload_size, page_size, 200);
+			code_ack = DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_READ_INDEX_TABLE, 200);
 
 			uint8_t remaining_bytes = (size - 32);
 
@@ -451,12 +459,15 @@ DY50_AckCode_t DY50_CMD_ReadIndexTable(DY50_Typedef_t *dy50, uint8_t readIndexTa
  *
  * @return whether it was possible to generate the image
  */
-DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50)
+DY50_AckCode_t DY50_Sync_CMD_GetImage(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	return DY50_SendCommand(dy50, DY50_CMD_GET_IMAGE, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD, 500);
+	dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD;
+	dy50->uart.rx_payload_len = PACKET_NOT_PAYLOAD;
+
+	return DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_GET_IMAGE, 500);
 }
 
 /*
@@ -469,12 +480,15 @@ DY50_AckCode_t DY50_CMD_GetImage(DY50_Typedef_t *dy50)
  *
  * @return whether it was possible to generate the image
  */
-DY50_AckCode_t DY50_CMD_GetImageDMA(DY50_Typedef_t *dy50)
+DY50_AckCode_t DY50_Async_CMD_GetImage(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_GET_IMAGE, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD, 500);
+	dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD;
+	dy50->uart.rx_payload_len = PACKET_NOT_PAYLOAD;
+
+	return DY50_Async_SendCommand_Wait_Response(dy50, DY50_CMD_GET_IMAGE, 500);
 }
 
 
@@ -496,7 +510,7 @@ DY50_AckCode_t DY50_CMD_GetImageDMA(DY50_Typedef_t *dy50)
  *
  * @retval returns whether the image was generated successfully
  */
-DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
+DY50_AckCode_t DY50_Sync_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -506,7 +520,10 @@ DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id
 
 	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
 
-	return(DY50_SendCommand(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD, 500));
+	dy50->uart.tx_payload_len = 1;
+	dy50->uart.rx_payload_len = PACKET_NOT_PAYLOAD;
+
+	return(DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_GEN_CHAR, 500));
 }
 
 /*
@@ -527,7 +544,7 @@ DY50_AckCode_t DY50_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id
  *
  * @returns whether the image was generated successfully
  */
-DY50_AckCode_t DY50_CMD_GenCharDMA(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
+DY50_AckCode_t DY50_Async_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer_id)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -537,7 +554,10 @@ DY50_AckCode_t DY50_CMD_GenCharDMA(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer
 
 	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
 
-	return(DY50_SendCommandResponse_DMA(dy50, DY50_CMD_GEN_CHAR, 1, PACKET_NOT_PAYLOAD, 500));
+	dy50->uart.tx_payload_len = 1;
+	dy50->uart.rx_payload_len = PACKET_NOT_PAYLOAD;
+
+	return(DY50_Async_SendCommand_Wait_Response(dy50, DY50_CMD_GEN_CHAR, 500));
 }
 
 /*
@@ -550,12 +570,87 @@ DY50_AckCode_t DY50_CMD_GenCharDMA(DY50_Typedef_t *dy50,  DY50_BufferId_t buffer
  *
  * @retval returns whether the ChaBuffers merges and template generation were sucessfull
  */
-DY50_AckCode_t DY50_CMD_RegModel(DY50_Typedef_t *dy50)
+DY50_AckCode_t DY50_Sync_CMD_RegModel(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	return(DY50_SendCommand(dy50, DY50_CMD_REG_MODEL, PACKET_NOT_PAYLOAD, PACKET_NOT_PAYLOAD, 500));
+	dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD;
+	dy50->uart.rx_payload_len = PACKET_NOT_PAYLOAD;
+
+	return(DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_REG_MODEL, 500));
+}
+
+/*
+ * @brief Sets an ID in Table Index
+ *
+ * @note Set an ID as marked in the Index table
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ * @param index is the index we want to mark
+ * @param value use 1 to select the ID and 0 to deselect the ID
+ *
+ * @returns whether it was possible to set the value in the ID
+ */
+DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if((index >= dy50->info.database_capacity) || (value > 1))
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	uint8_t buffer_index = (uint8_t)(index/8);
+
+	uint8_t bit_index = (uint8_t) (index % 8);     //map 0 to 7 value
+	bit_index = (uint8_t)(0x01 << bit_index);
+
+	if(value == 1)
+		dy50->info.table_index[buffer_index] |= bit_index;
+	else if(value == 0)
+		dy50->info.table_index[buffer_index] &= ~bit_index;
+
+	return ACK_OK;
+
+}
+
+/*
+ * @brief Command StoreChar (0x06)
+ *
+ * @note Stores the model generated by the RegModel command in the DY50 flash database
+ *
+ * @param buffer_id  the buffer where the template generated by RegModel is located (by default it is always in CharBuffer1)
+ * @param page_id    This is the ID that the template will be stored under in the DY50 flash database
+ *
+ * @returns whether it was possible to store the template in the DY50 flash database
+ *
+ * @warning If page_id already exists in Flash, it will be replaced without prior notice
+ */
+DY50_AckCode_t DY50_Sync_CMD_StoreChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t page_id)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if(page_id >= dy50->info.database_capacity)
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	DY50_AckCode_t ack_code;
+
+	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
+	dy50->uart.buf_tx.packet.payload[1] = (uint8_t)((page_id >> 8) & 0x00FF);
+	dy50->uart.buf_tx.packet.payload[2] = (uint8_t)(page_id & 0x00FF);
+
+	dy50->uart.tx_payload_len = 3;
+	dy50->uart.rx_payload_len = PACKET_NOT_PAYLOAD;
+
+	ack_code = DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_STORE_CHAR, 500);
+
+	if(ack_code == ACK_OK)
+	{
+		DY50_SetIndexTable(dy50, page_id, 1);
+	}
+
+	return ack_code;
 }
 
 /*
@@ -573,7 +668,7 @@ DY50_AckCode_t DY50_CMD_RegModel(DY50_Typedef_t *dy50)
  *
  * @retval 0x00 -> Successfull or 0x09 -> fingerprint not found
  */
-DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t start_page_id, uint16_t page_num)
+DY50_AckCode_t DY50_Async_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t start_page_id, uint16_t page_num)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
@@ -584,11 +679,10 @@ DY50_AckCode_t DY50_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, 
 	dy50->uart.buf_tx.packet.payload[3] = (uint8_t)((page_num >> 8) & 0x00FF);
 	dy50->uart.buf_tx.packet.payload[4] = (uint8_t)(page_num & 0x00FF);
 
-	const uint8_t payload_tx_len = 5,
-		          payload_rx_len = 4;
+	dy50->uart.tx_payload_len = 5;
+	dy50->uart.rx_payload_len = 4;
 
-	//return DY50_SendCommand_DMA(dy50, Dy50_CMD_SEARCH, payload_tx_len, payload_rx_len);
-	return DY50_SendCommandResponse_DMA(dy50, Dy50_CMD_SEARCH, payload_tx_len, payload_rx_len, 500);
+	return DY50_Async_SendCommand_Wait_Response(dy50, Dy50_CMD_SEARCH, 500);
 }
 
 uint8_t DY50_Mutex_Acquire(DY50_Typedef_t *dy50, DY50_Mutex_Status_t owner)
@@ -623,7 +717,7 @@ void DY50_Mutex_Release(DY50_Typedef_t *dy50, DY50_Mutex_Status_t owner)
 }
 
 
-DY50_AckCode_t DY50_CMD_DeletChar_DMA(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t num_of_templates)
+DY50_AckCode_t DY50_Async_CMD_DeletChar(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t num_of_templates)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 			return ACK_ERROR_DY50_UNINITIALIZED;
@@ -637,18 +731,21 @@ DY50_AckCode_t DY50_CMD_DeletChar_DMA(DY50_Typedef_t *dy50, uint16_t start_id, u
 	dy50->uart.buf_tx.packet.payload[2] = (uint8_t)((num_of_templates >> 8) & 0x00FF);
 	dy50->uart.buf_tx.packet.payload[3] = (uint8_t)(num_of_templates & 0x00FF);
 
-	const uint8_t payload_tx_len = 4,
-				  payload_rx_len = PACKET_NOT_PAYLOAD;
+	dy50->uart.tx_payload_len = 4;
+	dy50->uart.rx_payload_len = PACKET_NOT_PAYLOAD;
 
-	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_DELETE_CHAR, payload_tx_len, payload_rx_len, 500);
+	return DY50_Async_SendCommand_Wait_Response(dy50, DY50_CMD_DELETE_CHAR, 500);
 }
 
-DY50_AckCode_t DY50_CMD_Empty(DY50_Typedef_t *dy50)
+DY50_AckCode_t DY50_Async_CMD_Empty(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 			return ACK_ERROR_DY50_UNINITIALIZED;
 
-	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_EMPTY, PAYLOAD_TX_SIZE, PAYLOAD_RX_SIZE, 500);
+	dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD;
+	dy50->uart.rx_payload_len = PACKET_NOT_PAYLOAD;
+
+	return DY50_Async_SendCommand_Wait_Response(dy50, DY50_CMD_EMPTY, 500);
 }
 
 /*
@@ -658,31 +755,70 @@ DY50_AckCode_t DY50_CMD_Empty(DY50_Typedef_t *dy50)
  *
  * @returns whether the random code was generated successfully
  */
-DY50_AckCode_t DY50_CMD_GetRandomCode_DMA(DY50_Typedef_t *dy50)
+DY50_AckCode_t DY50_Async_CMD_GetRandomCode(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	const uint8_t payload_tx_len = PACKET_NOT_PAYLOAD,
-				  payload_rx_len = 4;
+	dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD;
+	dy50->uart.rx_payload_len = 4;
 
-	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_GET_RANDOM_CODE, payload_tx_len, payload_rx_len, 200);
+	return DY50_Async_SendCommand_Wait_Response(dy50, DY50_CMD_GET_RANDOM_CODE, 200);
 }
 
-
-DY50_AckCode_t DY50_CMD_ValidTemplateNum_DMA(DY50_Typedef_t *dy50)
+/*
+ * @brief Check how many valid templates exist in Flash memory
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @returns whether the verification was successfull
+ */
+DY50_AckCode_t DY50_Async_CMD_ValidTemplateNum(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	const uint8_t payload_tx_len = PACKET_NOT_PAYLOAD,
-				  payload_rx_len = 2;
+	dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD,
+	dy50->uart.rx_payload_len = 2;
 
-	return DY50_SendCommandResponse_DMA(dy50, DY50_CMD_VALID_TEMPLATE_NUM, payload_tx_len, payload_rx_len, 200);
+	return DY50_Async_SendCommand_Wait_Response(dy50, DY50_CMD_VALID_TEMPLATE_NUM, 200);
 }
 
+static inline void DY50_BUILD_LoadChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t page_id)
+{
+	dy50->uart.buf_tx.packet.payload[0] = buffer_id;
+	dy50->uart.buf_tx.packet.payload[1] = (uint8_t)((page_id >> 8) & 0x00FF);
+	dy50->uart.buf_tx.packet.payload[2] = (uint8_t)(page_id & 0x00FF);
 
+	dy50->uart.tx_payload_len = 3;
+	dy50->uart.rx_payload_len = PACKET_NOT_PAYLOAD;
+}
 
+DY50_AckCode_t DY50_Async_CMD_LoadChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t page_id)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if((buffer_id < DY50_BUFFER_ID_1) || (buffer_id > DY50_BUFFER_ID_4))
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	DY50_BUILD_LoadChar(dy50, buffer_id, page_id);
+
+	return DY50_Async_SendCommand_Wait_Response(dy50, DY50_CMD_LOAD_CHAR, 500);
+}
+
+DY50_AckCode_t DY50_Sync_CMD_LoadChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t page_id)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	if((buffer_id < DY50_BUFFER_ID_1) || (buffer_id > DY50_BUFFER_ID_4))
+		return ACK_ERROR_INVALID_PARAMETER;
+
+	DY50_BUILD_LoadChar(dy50, buffer_id, page_id);
+
+	return DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_LOAD_CHAR, 500);
+}
 
 
 

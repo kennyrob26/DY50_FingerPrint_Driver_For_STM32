@@ -87,6 +87,7 @@ typedef enum
 	Dy50_CMD_SEARCH             =  0x04,
 	DY50_CMD_REG_MODEL 			=  0x05,
 	DY50_CMD_STORE_CHAR         =  0x06,
+	DY50_CMD_LOAD_CHAR          =  0x07,
 	DY50_CMD_DELETE_CHAR        =  0x0C,
 	DY50_CMD_EMPTY			    =  0x0D,
 	DY50_CMD_READ_SYSTEM_PARAMS =  0x0F,
@@ -95,6 +96,12 @@ typedef enum
 	DY50_CMD_VALID_TEMPLATE_NUM =  0x1D,
 	DY50_CMD_READ_INDEX_TABLE   =  0x1F
 }DY50_Commands_t;
+
+typedef enum
+{
+	DY50_COMMAND_ASYNC,
+	DY50_COMMAND_SYNC
+}DY50_Command_Type_t;
 
 typedef enum
 {
@@ -166,9 +173,9 @@ typedef struct
 {
 	uint8_t dma_flag;
 	DY50_Buffer_t buf_tx;
-	uint8_t tx_len;
+	uint8_t tx_payload_len;
 	DY50_Buffer_t buf_rx;
-	uint8_t rx_len;
+	uint8_t rx_payload_len;
 }DY50_UART_Info_t;
 
 
