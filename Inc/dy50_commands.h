@@ -36,11 +36,15 @@ DY50_AckCode_t DY50_Async_CMD_GenChar(DY50_Typedef_t *dy50,  DY50_BufferId_t buf
 DY50_AckCode_t DY50_SetIndexTable(DY50_Typedef_t *dy50, uint16_t index, uint8_t value);
 DY50_AckCode_t DY50_Sync_CMD_StoreChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t page_id);
 DY50_AckCode_t DY50_Sync_CMD_RegModel(DY50_Typedef_t *dy50);
+DY50_AckCode_t DY50_Async_CMD_RegModel(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_Async_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t start_page_id, uint16_t page_num);
+DY50_AckCode_t DY50_Sync_CMD_Search(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t start_page_id, uint16_t page_num);
 uint8_t DY50_Mutex_Acquire(DY50_Typedef_t *dy50, DY50_Mutex_Status_t owner);
 void DY50_Mutex_Release(DY50_Typedef_t *dy50, DY50_Mutex_Status_t owner);
 DY50_AckCode_t DY50_Async_CMD_DeletChar(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t num_of_templates);
+DY50_AckCode_t DY50_Sync_CMD_DeletChar(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t num_of_templates);
 DY50_AckCode_t DY50_Async_CMD_Empty(DY50_Typedef_t *dy50);
+DY50_AckCode_t DY50_Sync_CMD_Empty(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_Async_CMD_GetRandomCode(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_Async_CMD_ValidTemplateNum(DY50_Typedef_t *dy50);
 #endif /* DY50_FINGERPRINT_DRIVER_FOR_STM32_INC_DY50_COMMANDS_H_ */
