@@ -915,41 +915,52 @@ DY50_AckCode_t DY50_Sync_CMD_Empty(DY50_Typedef_t *dy50)
 
 	return DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_EMPTY, 500);
 }
+
+
+static inline void DY50_BUILD_GetRandomCode(DY50_Typedef_t *dy50)
+{
+	dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD;
+	dy50->uart.rx_payload_len = 4;
+}
+
 /*
- * @brief Generate a random code (4 bytes)
+ * @brief Generate a random code (4 bytes) - Async Version
  *
  * @param dy50  Is a pointer for dy50 handler
  *
- * @returns whether the random code was generated successfully
+ * @returns the command state
  */
 DY50_AckCode_t DY50_Async_CMD_GetRandomCode(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD;
-	dy50->uart.rx_payload_len = 4;
+	DY50_BUILD_GetRandomCode(dy50);
+
+	//dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD;
+	//dy50->uart.rx_payload_len = 4;
 
 	return DY50_Async_SendCommand_Wait_Response(dy50, DY50_CMD_GET_RANDOM_CODE, 200);
 }
 
 /*
- * @brief Check how many valid templates exist in Flash memory
+ * @brief Generate a random code (4 bytes) - Sync Version
  *
  * @param dy50  Is a pointer for dy50 handler
  *
- * @returns whether the verification was successfull
+ * @returns whether the random code was generated successfully
  */
-DY50_AckCode_t DY50_Async_CMD_ValidTemplateNum(DY50_Typedef_t *dy50)
+DY50_AckCode_t DY50_Sync_CMD_GetRandomCode(DY50_Typedef_t *dy50)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD,
-	dy50->uart.rx_payload_len = 2;
+	DY50_BUILD_GetRandomCode(dy50);
 
-	return DY50_Async_SendCommand_Wait_Response(dy50, DY50_CMD_VALID_TEMPLATE_NUM, 200);
+	return DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_GET_RANDOM_CODE, 200);
 }
+
+
 
 static inline void DY50_BUILD_LoadChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t page_id)
 {
@@ -987,8 +998,49 @@ DY50_AckCode_t DY50_Sync_CMD_LoadChar(DY50_Typedef_t *dy50, DY50_BufferId_t buff
 	return DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_LOAD_CHAR, 500);
 }
 
+static inline void DY50_BUILD_ValidTemplateNum(DY50_Typedef_t *dy50)
+{
+	dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD,
+	dy50->uart.rx_payload_len = 2;
+}
 
+/*
+ * @brief Reading Valid template number (0x1D) - Async Version
+ *
+ * @note Check how many valid templates exist in Flash memory
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @returns whether the verification was successfull
+ */
+DY50_AckCode_t DY50_Async_CMD_ValidTemplateNum(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
 
+	DY50_BUILD_ValidTemplateNum(dy50);
+
+	return DY50_Async_SendCommand_Wait_Response(dy50, DY50_CMD_VALID_TEMPLATE_NUM, 200);
+}
+
+/*
+ * @brief Reading Valid template number (0x1D) - Sync Version
+ *
+ * @note Check how many valid templates exist in Flash memory
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @returns whether the verification was successfull
+ */
+DY50_AckCode_t DY50_Sync_CMD_ValidTemplateNum(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	DY50_BUILD_ValidTemplateNum(dy50);
+
+	return DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_VALID_TEMPLATE_NUM, 200);
+}
 
 
 
