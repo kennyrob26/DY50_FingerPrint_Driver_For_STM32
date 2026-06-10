@@ -608,25 +608,23 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 
 	DY50_AckCode_t ack_code = ACK_OK;
 
+	DY50_FingerTouchState_t finger_state;
+
 	uint8_t callback_is_valid = 0;
 
 	if(dy50->touch.flag == 1)
 	{
 
-
-		if(dy50->enroll.handler_state != DY50_ENROLL_HANDLER_STATE_IDLE)
+		uint8_t finger_in_touch = HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin);
+		if(finger_in_touch != 0)   // 0 is finger in touch, 1 not finger in touch
 		{
-			uint8_t finger_in_touch = HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin);
-			if(finger_in_touch != 0)   // 0 is finger in touch, 1 not finger in touch
-			{
-				DY50_EnrollError(dy50);
+			DY50_EnrollError(dy50);
 
-				ack_code = ACK_ERROR_NOT_FINGER;
-				dy50->touch.flag = 0;
-				return ack_code;
-			}
+			ack_code = ACK_ERROR_NOT_FINGER;
+			dy50->touch.flag = 0;
+			return ack_code;
 		}
-		DY50_FingerTouchState_t finger_state;
+
 
 		switch (dy50->enroll.handler_state)
 		{
@@ -636,18 +634,9 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 				{
 					dy50->enroll.last_measure_time = HAL_GetTick();
 
-					finger_state = DY50_FingerIsOnTouch(dy50);
-					if(finger_state == DY50_FINGER_IN_TOUCH_ACCEPTED)
-					{
-						dy50->enroll.handler_state = DY50_ENROLL_HANDLER_CMD_ENROLL;
-						dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
-						ack_code = ACK_OK;
-					}
-					else if(finger_state == DY50_FINGER_IN_TOUCH_WAITING_TIME)
-					{
-						ack_code = ACK_WATING_RESPONSE;
-						return ack_code;
-					}
+					dy50->enroll.handler_state = DY50_ENROLL_HANDLER_CMD_ENROLL;
+					dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
+					ack_code = ACK_OK;
 				}
 				else
 				{
@@ -656,6 +645,7 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 				}
 
 				callback_is_valid = 0;
+
 				break;
 
 			case DY50_ENROLL_HANDLER_CMD_ENROLL:
@@ -723,22 +713,14 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 				break;
 		}
 
-	}
+		}
 
-
-
-//	if(dy50->enroll.handler_state == DY50_ENROLL_HANDLER_STATE_IDLE)
-//	{
-//		//DY50_Mutex_Release(dy50, DY50_MUTEX_ENROLL_LOCK);
-//	}
-//	else if(dy50->enroll.handler_state == DY50_ENROLL_HANDLER_CMD_ENROLL)
 
 	if(callback_is_valid == 1)
 	{
 		dy50->event.ack_code = ack_code;
 		dy50->event.data.enroll.last_state = dy50->enroll.last_state;
 		DY50_EventCallback(dy50, DY50_STATUS_ENROLL_HANDLER);
-
 	}
 
 
