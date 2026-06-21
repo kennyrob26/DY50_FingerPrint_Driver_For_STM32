@@ -54,10 +54,11 @@ typedef enum
 	ACK_ERROR_RECEIVING       	  = 0x01,
 	ACK_ERROR_NOT_FINGER      	  = 0x02,
 	ACK_ERROR_GET_FINGERPRINT 	  = 0x03,
-	ACK_ERROR_IMAGE_IS_TOO_LIGHT  = 0x04, //0x04 a 0x07
+	ACK_ERROR_IMAGE_IS_TOO_LIGHT  = 0x04,
 	ACK_ERROR_IMAGE_IS_TOO_BLURRY = 0x05,
 	ACK_ERROR_IMAGE_IS_AMORPHOUS  = 0x06,
 	ACK_ERROR_IMAGE_IS_TOO_LITTLE = 0x07,
+	ACK_ERROR_UNMATCHED           = 0x08,		//In Match command
 	ACK_ERROR_DELETE_FAIL         = 0x10,
 
 	ACK_ERROR_FINGERPRINT_NOT_FOUND = 0x09,		//In Search Command
@@ -84,6 +85,7 @@ typedef enum
 {
 	DY50_CMD_GET_IMAGE 			=  0x01,
 	DY50_CMD_GEN_CHAR  			=  0x02,
+	DY50_CMD_MATCH              =  0x03,
 	Dy50_CMD_SEARCH             =  0x04,
 	DY50_CMD_REG_MODEL 			=  0x05,
 	DY50_CMD_STORE_CHAR         =  0x06,
@@ -158,6 +160,14 @@ typedef enum
 
 typedef enum
 {
+	DY50_MATCH_STATE_IDLE         = 0,
+	DY50_MATCH_STATE_CMD_GENCHAR  = 1,
+	DY50_MATCH_STATE_CMD_LOADCHAR = 2,
+	DY50_MATCH_STATE_CMD_MATCH    = 3,
+}DY50_MatchStateHandler_t;
+
+typedef enum
+{
 	DY50_FINGER_IN_TOUCH_ACCEPTED     = 0,
 	DY50_FINGER_IN_TOUCH_WAITING_TIME = 1,
 	DY50_FINGER_NOT_IN_TOUCH          = 2
@@ -212,6 +222,12 @@ typedef struct
 
 typedef struct
 {
+	uint16_t target_id;
+	uint8_t math_score;
+}DY50_Match_Return_t;
+
+typedef struct
+{
 	DY50_EnrollState_t last_state;
 }DY50_Enroll_Return_t;
 
@@ -219,6 +235,7 @@ typedef union
 {
 	DY50_Search_Return_t search;
 	DY50_Enroll_Return_t enroll;
+	DY50_Match_Return_t match;
 }DY50_Event_Data_t;
 
 typedef struct
@@ -258,6 +275,7 @@ typedef enum
 	DY50_STATUS_ENROLL_HANDLER     = 2,
 	DY50_STATUS_SEARCH_FINGERPRINT = 3,
 	DY50_STATUS_DELETE_TEMPLATE    = 4,
+	DY50_STATUS_MATCH_HANDLER      = 5,
 }DY50_Status_t;
 
 typedef enum
@@ -266,6 +284,7 @@ typedef enum
 	DY50_MUTEX_ENROLL_LOCK = 0x01,
 	DY50_MUTEX_SEARCH_LOCK = 0x02,
 	DY50_MUTEX_DELETE_LOCK = 0x03,
+	DY50_MUTEX_MATCH_LOCK  = 0x04,
 }DY50_Mutex_Status_t;
 
 typedef struct
@@ -289,6 +308,8 @@ typedef struct
 	DY50_Enroll_t enroll;
 	DY50_Search_t search;
 	DY50_Delete_t delete;
+	DY50_MatchStateHandler_t math_state;
+	uint8_t math_target_id;
 
 }DY50_Typedef_t;
 

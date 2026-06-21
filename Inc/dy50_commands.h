@@ -52,4 +52,7 @@ DY50_AckCode_t DY50_Async_CMD_LoadChar(DY50_Typedef_t *dy50, DY50_BufferId_t buf
 DY50_AckCode_t DY50_Sync_CMD_LoadChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t page_id);
 DY50_AckCode_t DY50_Async_CMD_ValidTemplateNum(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_Sync_CMD_ValidTemplateNum(DY50_Typedef_t *dy50);
+DY50_AckCode_t DY50_Async_CMD_Match(DY50_Typedef_t *dy50);
+DY50_AckCode_t DY50_Sync_CMD_Match(DY50_Typedef_t *dy50);
+
 #endif /* DY50_FINGERPRINT_DRIVER_FOR_STM32_INC_DY50_COMMANDS_H_ */

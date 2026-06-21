@@ -972,6 +972,13 @@ static inline void DY50_BUILD_LoadChar(DY50_Typedef_t *dy50, DY50_BufferId_t buf
 	dy50->uart.rx_payload_len = PACKET_NOT_PAYLOAD;
 }
 
+/*
+ * @brief Command LoadChar (0x03)
+ *
+ * @note Loads a fingerprint from the flash memory to the defined buffer
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ */
 DY50_AckCode_t DY50_Async_CMD_LoadChar(DY50_Typedef_t *dy50, DY50_BufferId_t buffer_id, uint16_t page_id)
 {
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
@@ -1043,7 +1050,53 @@ DY50_AckCode_t DY50_Sync_CMD_ValidTemplateNum(DY50_Typedef_t *dy50)
 }
 
 
+static inline void DY50_BUILD_Match(DY50_Typedef_t *dy50)
+{
+	dy50->uart.tx_payload_len = PACKET_NOT_PAYLOAD,
+	dy50->uart.rx_payload_len = 2;
+}
 
+/*
+ *  @brief Match Command (0x03) - Async Version
+ *
+ * @note Compare fingerprints and return how well they match,
+ *       this command necessarily expects one fingerprint in buffer 1
+ *       and another in buffer 2 and compares them
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @returns the command state
+ */
+DY50_AckCode_t DY50_Async_CMD_Match(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	DY50_BUILD_Match(dy50);
+
+	return DY50_Async_SendCommand_Wait_Response(dy50, DY50_CMD_MATCH, 200);
+}
+
+/*
+ *  @brief Match Command (0x03) - Sync Version
+ *
+ * @note Compare fingerprints and return how well they match,
+ *       this command necessarily expects one fingerprint in buffer 1
+ *       and another in buffer 2 and compares them
+ *
+ * @param dy50  Is a pointer for dy50 handler
+ *
+ * @returns whether the match command is successfuly
+ */
+DY50_AckCode_t DY50_Sync_CMD_Match(DY50_Typedef_t *dy50)
+{
+	if(dy50->status == DY50_STATUS_UNINITIALIZED)
+		return ACK_ERROR_DY50_UNINITIALIZED;
+
+	DY50_BUILD_Match(dy50);
+
+	return DY50_Sync_SendCommand_Wait_Response(dy50, DY50_CMD_MATCH, 200);
+}
 
 
 
