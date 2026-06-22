@@ -204,13 +204,12 @@ typedef struct
 	uint32_t last_measure_time;
 	uint32_t debouncing_init_time;
 	int16_t table_id;
-	DY50_Enroll_Handler_State_t handler_state;
 }DY50_Enroll_t;
 
 
 typedef struct
 {
-	DY50_SearchState_t state;
+	//DY50_SearchState_t state;
 	uint32_t last_measuere_time;
 }DY50_Search_t;
 
@@ -252,7 +251,7 @@ typedef enum
 
 typedef struct
 {
-	DY50_DeleteHandler_State_t state;
+	//DY50_DeleteHandler_State_t state;
 	uint16_t id;
 	uint16_t num_of_templates;
 }DY50_Delete_t;
@@ -287,6 +286,15 @@ typedef enum
 	DY50_MUTEX_MATCH_LOCK  = 0x04,
 }DY50_Mutex_Status_t;
 
+
+typedef union
+{
+	DY50_EnrollState_t enroll_state;
+	DY50_SearchState_t search_state;
+	DY50_DeleteHandler_State_t delete_state;
+	DY50_MatchStateHandler_t match_state;
+}DY50_Handler_State_t;
+
 typedef struct
 {
 	UART_HandleTypeDef *huart;
@@ -304,11 +312,14 @@ typedef struct
 
 	DY50_Command_DMA_Status_t cmd_dma_status;
 
+	DY50_Handler_State_t handler;
+
 	DY50_GenerateChar_Status_t genchar_status;
+
 	DY50_Enroll_t enroll;
 	DY50_Search_t search;
 	DY50_Delete_t delete;
-	DY50_MatchStateHandler_t math_state;
+
 	uint8_t math_target_id;
 
 }DY50_Typedef_t;

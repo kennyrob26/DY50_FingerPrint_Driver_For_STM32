@@ -463,7 +463,7 @@ void DY50_FingerTouchInterrupt(DY50_Typedef_t *dy50)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return;
 
-	if(dy50->touch.flag == 0)
+	if(dy50->touch.flag == 0 && dy50->status == DY50_STATUS_ENROLL_HANDLER)
 	{
 		dy50->enroll.debouncing_init_time = HAL_GetTick();
 		dy50->touch.flag = 1;
@@ -473,7 +473,7 @@ void DY50_FingerTouchInterrupt(DY50_Typedef_t *dy50)
 static inline void DY50_EnrollError(DY50_Typedef_t *dy50)
 {
 	dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
-	dy50->enroll.handler_state = DY50_ENROLL_HANDLER_STATE_IDLE;
+	dy50->handler.enroll_state = DY50_ENROLL_HANDLER_STATE_IDLE;
 	dy50->touch.flag = 0;
 	DY50_Mutex_Release(dy50, DY50_MUTEX_ENROLL_LOCK);
 }
@@ -495,8 +495,6 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 
 	DY50_AckCode_t ack_code = ACK_OK;
 
-	DY50_FingerTouchState_t finger_state;
-
 	uint8_t callback_is_valid = 0;
 
 	if(dy50->touch.flag == 1)
@@ -513,7 +511,7 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 		}
 
 
-		switch (dy50->enroll.handler_state)
+		switch (dy50->handler.enroll_state)
 		{
 			case DY50_ENROLL_HANDLER_STATE_IDLE:
 
@@ -521,7 +519,7 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 				{
 					dy50->enroll.last_measure_time = HAL_GetTick();
 
-					dy50->enroll.handler_state = DY50_ENROLL_HANDLER_CMD_ENROLL;
+					dy50->handler.enroll_state = DY50_ENROLL_HANDLER_CMD_ENROLL;
 					dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
 					ack_code = ACK_OK;
 				}
@@ -545,7 +543,7 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 					{
 						if(dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE)
 						{
-							dy50->enroll.handler_state = DY50_ENROLL_HANDLER_CMD_REG_MODEL;
+							dy50->handler.enroll_state = DY50_ENROLL_HANDLER_CMD_REG_MODEL;
 						}
 						else
 						{
@@ -569,7 +567,7 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 
 				if(ack_code == ACK_OK)
 				{
-					dy50->enroll.handler_state = DY50_ENROLL_HANDLER_CMD_STORE_CHAR;
+					dy50->handler.enroll_state = DY50_ENROLL_HANDLER_CMD_STORE_CHAR;
 				}
 				else if(ack_code != ACK_WATING_RESPONSE)
 				{
@@ -587,7 +585,7 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 				{
 					callback_is_valid = 1;
 
-					dy50->enroll.handler_state = DY50_ENROLL_HANDLER_STATE_IDLE;
+					dy50->handler.enroll_state = DY50_ENROLL_HANDLER_STATE_IDLE;
 					DY50_Mutex_Release(dy50, DY50_MUTEX_ENROLL_LOCK);
 				}
 				else if(ack_code != ACK_WATING_RESPONSE)
@@ -698,7 +696,7 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 	if(HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin) == 0)
 	{
-		switch (dy50->search.state)
+		switch (dy50->handler.search_state)
 		{
 			case DY50_SEARCH_STATE_IDLE:
 
@@ -716,12 +714,12 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 						}
 						else
 						{
-							dy50->search.state = DY50_SEARCH_STATE_CMD_GENCHAR;
+							dy50->handler.search_state = DY50_SEARCH_STATE_CMD_GENCHAR;
 						}
 					}
 					else
 					{
-						dy50->search.state = DY50_SEARCH_STATE_IDLE;
+						dy50->handler.search_state = DY50_SEARCH_STATE_IDLE;
 						ack_code = ACK_ERROR_MUTEX_IS_LOCK;
 					}
 
@@ -736,11 +734,11 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 				if(ack_code == ACK_OK)
 				{
-					dy50->search.state = DY50_SEARCH_STATE_CMD_SEARCH;
+					dy50->handler.search_state = DY50_SEARCH_STATE_CMD_SEARCH;
 				}
 				else if(ack_code != ACK_WATING_RESPONSE)
 				{
-					dy50->search.state = DY50_SEARCH_STATE_IDLE;
+					dy50->handler.search_state = DY50_SEARCH_STATE_IDLE;
 					DY50_Mutex_Release(dy50, DY50_MUTEX_SEARCH_LOCK);
 				}
 				break;
@@ -769,7 +767,7 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 				else if(ack_code != ACK_WATING_RESPONSE)
 				{
 					callback_is_valid = 0;
-					dy50->search.state = DY50_SEARCH_STATE_IDLE;
+					dy50->handler.search_state = DY50_SEARCH_STATE_IDLE;
 					DY50_Mutex_Release(dy50, DY50_MUTEX_SEARCH_LOCK);
 				}
 
@@ -792,15 +790,13 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 	}
 	else
 	{
-		dy50->search.state = DY50_SEARCH_STATE_IDLE;
+		dy50->handler.search_state = DY50_SEARCH_STATE_IDLE;
 		DY50_Mutex_Release(dy50, DY50_MUTEX_SEARCH_LOCK);
 		ack_code = ACK_ERROR;
 	}
 
-	if(dy50->search.state == DY50_SEARCH_STATE_COMPLETED)
-		dy50->search.state = DY50_SEARCH_STATE_IDLE;
-
-	dy50->touch.flag = 0;	//We didn't use the flag, but it still needs to be reset to zero
+	if(dy50->handler.search_state == DY50_SEARCH_STATE_COMPLETED)
+		dy50->handler.search_state = DY50_SEARCH_STATE_IDLE;
 
 	return ack_code;
 
@@ -819,7 +815,7 @@ DY50_AckCode_t DY50_Math_FingerPrint(DY50_Typedef_t *dy50, uint16_t target_id)
 	if(ack_code == ACK_OK)
 	{
 		dy50->math_target_id = target_id;
-		dy50->math_state = DY50_MATCH_STATE_IDLE;
+		dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
 	}
 
 	return ack_code;
@@ -834,7 +830,7 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 
 	if(HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin) == 0)
 		{
-			switch (dy50->math_state)
+			switch (dy50->handler.match_state)
 			{
 				case DY50_MATCH_STATE_IDLE:
 
@@ -846,12 +842,12 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 						}
 						else
 						{
-							dy50->math_state = DY50_MATCH_STATE_CMD_GENCHAR;
+							dy50->handler.match_state = DY50_MATCH_STATE_CMD_GENCHAR;
 						}
 					}
 					else
 					{
-						dy50->math_state = DY50_MATCH_STATE_IDLE;
+						dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
 						ack_code = ACK_ERROR_MUTEX_IS_LOCK;
 					}
 					break;
@@ -862,11 +858,11 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 
 					if(ack_code == ACK_OK)
 					{
-						dy50->math_state = DY50_MATCH_STATE_CMD_LOADCHAR;
+						dy50->handler.match_state = DY50_MATCH_STATE_CMD_LOADCHAR;
 					}
 					else if(ack_code != ACK_WATING_RESPONSE)
 					{
-						dy50->math_state = DY50_MATCH_STATE_IDLE;
+						dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
 						DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
 					}
 					break;
@@ -877,11 +873,11 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 
 					if(ack_code == ACK_OK)
 					{
-						dy50->math_state = DY50_MATCH_STATE_CMD_MATCH;
+						dy50->handler.match_state = DY50_MATCH_STATE_CMD_MATCH;
 					}
 					else if(ack_code != ACK_WATING_RESPONSE)
 					{
-						dy50->math_state = DY50_MATCH_STATE_IDLE;
+						dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
 						DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
 					}
 
@@ -908,7 +904,7 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 					else if(ack_code != ACK_WATING_RESPONSE)
 					{
 						callback_is_valid = 0;
-						dy50->math_state = DY50_MATCH_STATE_IDLE;
+						dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
 						DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
 
 						DY50_ChageStatus(dy50, DY50_STATUS_IDLE);
@@ -921,7 +917,7 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 						DY50_EventCallback(dy50, DY50_STATUS_MATCH_HANDLER);
 
 						DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
-						dy50->math_state = DY50_MATCH_STATE_IDLE;
+						dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
 
 						DY50_ChageStatus(dy50, DY50_STATUS_IDLE); //return to IDLE status whether mutex is free (Error or successfully)
 
@@ -935,13 +931,10 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 		}
 		else
 		{
-			dy50->math_state = DY50_MATCH_STATE_IDLE;
+			dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
 			DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
 			ack_code = ACK_ERROR;
 		}
-
-
-		dy50->touch.flag = 0;	//We didn't use the flag, but it still needs to be reset to zero
 
 		return ack_code;
 }
