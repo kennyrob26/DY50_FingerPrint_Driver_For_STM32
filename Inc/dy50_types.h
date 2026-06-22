@@ -200,18 +200,9 @@ typedef enum
 
 typedef struct
 {
-	DY50_EnrollState_t last_state;
-	uint32_t last_measure_time;
 	uint32_t debouncing_init_time;
 	int16_t table_id;
 }DY50_Enroll_t;
-
-
-typedef struct
-{
-	//DY50_SearchState_t state;
-	uint32_t last_measuere_time;
-}DY50_Search_t;
 
 typedef struct
 {
@@ -243,15 +234,8 @@ typedef struct
 	DY50_Event_Data_t data;
 }DY50_Event_Info_t;
 
-typedef enum
-{
-	DY50_DELETE_HANDLER_STATE_IDLE        = 0,
-	DY50_DELETE_HANDLER_STATE_INITIALIZED,
-}DY50_DeleteHandler_State_t;
-
 typedef struct
 {
-	//DY50_DeleteHandler_State_t state;
 	uint16_t id;
 	uint16_t num_of_templates;
 }DY50_Delete_t;
@@ -289,11 +273,19 @@ typedef enum
 
 typedef union
 {
-	DY50_EnrollState_t enroll_state;
-	DY50_SearchState_t search_state;
-	DY50_DeleteHandler_State_t delete_state;
-	DY50_MatchStateHandler_t match_state;
+	uint8_t raw;
+	DY50_EnrollState_t enroll;
+	DY50_SearchState_t search;
+	DY50_MatchStateHandler_t match;
 }DY50_Handler_State_t;
+
+typedef struct
+{
+	DY50_Handler_State_t status;
+	uint32_t last_measure_time;
+	DY50_Enroll_t enroll;
+	DY50_Delete_t delete;
+}DY50_HandlerTypeDef;
 
 typedef struct
 {
@@ -312,13 +304,9 @@ typedef struct
 
 	DY50_Command_DMA_Status_t cmd_dma_status;
 
-	DY50_Handler_State_t handler;
+	DY50_HandlerTypeDef handler;
 
 	DY50_GenerateChar_Status_t genchar_status;
-
-	DY50_Enroll_t enroll;
-	DY50_Search_t search;
-	DY50_Delete_t delete;
 
 	uint8_t math_target_id;
 

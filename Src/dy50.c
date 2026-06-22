@@ -343,7 +343,7 @@ DY50_FingerTouchState_t DY50_FingerIsOnTouch(DY50_Typedef_t *dy50)
 
 	if(touch_state == 0) //Exist fingfer
 	{
-		if(((HAL_GetTick() - dy50->enroll.debouncing_init_time) > TOUCH_DEBOUNCE_TIME))
+		if(((HAL_GetTick() - dy50->handler.enroll.debouncing_init_time) > TOUCH_DEBOUNCE_TIME))
 		{
 			return DY50_FINGER_IN_TOUCH_ACCEPTED;
 		}
@@ -379,24 +379,24 @@ DY50_AckCode_t DY50_Enroll(DY50_Typedef_t *dy50)
 	DY50_BufferId_t buffer_id;
 	DY50_AckCode_t ack_code;
 
-	if(dy50->enroll.last_state == DY50_ENROLL_STATE_IDLE)
+	if(dy50->event.data.enroll.last_state == DY50_ENROLL_STATE_IDLE)
 	{
-		dy50->enroll.last_measure_time = HAL_GetTick(); //Reset time in first reading
-		dy50->enroll.table_id = DY50_FindFirstFreeIDInIndexTable(dy50);
+		dy50->handler.last_measure_time = HAL_GetTick(); //Reset time in first reading
+		dy50->handler.enroll.table_id = DY50_FindFirstFreeIDInIndexTable(dy50);
 
-		if(dy50->enroll.table_id < 0)
+		if(dy50->handler.enroll.table_id < 0)
 			return ACK_ERROR_TABLE_ID_IS_FULL;
 	}
 
-	if(dy50->enroll.last_state != DY50_ENROLL_STATE_COMPLETE)
+	if(dy50->event.data.enroll.last_state != DY50_ENROLL_STATE_COMPLETE)
 	{
-		dy50->enroll.last_state++;   //Next state
+		dy50->event.data.enroll.last_state++;   //Next state
 	}
 
 
-	if((HAL_GetTick() - dy50->enroll.last_measure_time) < ENROLL_MAX_TIME_IDLE_BETWEEN_READING)
+	if((HAL_GetTick() - dy50->handler.last_measure_time) < ENROLL_MAX_TIME_IDLE_BETWEEN_READING)
 	{
-		switch (dy50->enroll.last_state)
+		switch (dy50->event.data.enroll.last_state)
 		{
 			case DY50_ENROLL_STATE_IDLE:
 				return ACK_ERROR_IMPOSSIBLE_STATE; //ERROR: the IDLE state is not a possible case in this state machine
@@ -422,25 +422,25 @@ DY50_AckCode_t DY50_Enroll(DY50_Typedef_t *dy50)
 		ack_code = DY50_GenerateCharDMA(dy50, buffer_id);
 		if(ack_code == ACK_OK)
 		{
-			dy50->enroll.last_measure_time = HAL_GetTick();
+			dy50->handler.last_measure_time = HAL_GetTick();
 		}
 		else if(ack_code == ACK_WATING_RESPONSE)
 		{
-			dy50->enroll.last_state--;   //Repeat current state, waiting response
+			dy50->event.data.enroll.last_state--;   //Repeat current state, waiting response
 		}
 		else if( checkIfBadImageError(ack_code))
 		{
-			dy50->enroll.last_state--;   //Repeat current state
-			dy50->enroll.last_measure_time = HAL_GetTick();
+			dy50->event.data.enroll.last_state--;   //Repeat current state
+			dy50->handler.last_measure_time = HAL_GetTick();
 		}
 		else
 		{
-			dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;  //FATAL ERROR
+			dy50->event.data.enroll.last_state = DY50_ENROLL_STATE_IDLE;  //FATAL ERROR
 		}
 	}
 	else
 	{
-		dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;  //ERROR case timeout
+		dy50->event.data.enroll.last_state = DY50_ENROLL_STATE_IDLE;  //ERROR case timeout
 		ack_code = ACK_ERROR_TIMEOUT;
 	}
 
@@ -465,15 +465,15 @@ void DY50_FingerTouchInterrupt(DY50_Typedef_t *dy50)
 
 	if(dy50->touch.flag == 0 && dy50->status == DY50_STATUS_ENROLL_HANDLER)
 	{
-		dy50->enroll.debouncing_init_time = HAL_GetTick();
+		dy50->handler.enroll.debouncing_init_time = HAL_GetTick();
 		dy50->touch.flag = 1;
 	}
 }
 
 static inline void DY50_EnrollError(DY50_Typedef_t *dy50)
 {
-	dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
-	dy50->handler.enroll_state = DY50_ENROLL_HANDLER_STATE_IDLE;
+	dy50->event.data.enroll.last_state = DY50_ENROLL_STATE_IDLE;
+	dy50->handler.status.enroll = DY50_ENROLL_HANDLER_STATE_IDLE;
 	dy50->touch.flag = 0;
 	DY50_Mutex_Release(dy50, DY50_MUTEX_ENROLL_LOCK);
 }
@@ -511,16 +511,16 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 		}
 
 
-		switch (dy50->handler.enroll_state)
+		switch (dy50->handler.status.enroll)
 		{
 			case DY50_ENROLL_HANDLER_STATE_IDLE:
 
 				if(DY50_Mutex_Acquire(dy50, DY50_MUTEX_ENROLL_LOCK))
 				{
-					dy50->enroll.last_measure_time = HAL_GetTick();
+					dy50->handler.last_measure_time = HAL_GetTick();
 
-					dy50->handler.enroll_state = DY50_ENROLL_HANDLER_CMD_ENROLL;
-					dy50->enroll.last_state = DY50_ENROLL_STATE_IDLE;
+					dy50->handler.status.enroll = DY50_ENROLL_HANDLER_CMD_ENROLL;
+					dy50->event.data.enroll.last_state = DY50_ENROLL_STATE_IDLE;
 					ack_code = ACK_OK;
 				}
 				else
@@ -541,9 +541,9 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 				{
 					if(ack_code == ACK_OK)
 					{
-						if(dy50->enroll.last_state == DY50_ENROLL_STATE_COMPLETE)
+						if(dy50->event.data.enroll.last_state == DY50_ENROLL_STATE_COMPLETE)
 						{
-							dy50->handler.enroll_state = DY50_ENROLL_HANDLER_CMD_REG_MODEL;
+							dy50->handler.status.enroll = DY50_ENROLL_HANDLER_CMD_REG_MODEL;
 						}
 						else
 						{
@@ -567,7 +567,7 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 
 				if(ack_code == ACK_OK)
 				{
-					dy50->handler.enroll_state = DY50_ENROLL_HANDLER_CMD_STORE_CHAR;
+					dy50->handler.status.enroll = DY50_ENROLL_HANDLER_CMD_STORE_CHAR;
 				}
 				else if(ack_code != ACK_WATING_RESPONSE)
 				{
@@ -579,13 +579,13 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 
 			case DY50_ENROLL_HANDLER_CMD_STORE_CHAR:
 
-				ack_code = DY50_Async_CMD_StoreChar(dy50, DY50_BUFFER_ID_1, dy50->enroll.table_id);
+				ack_code = DY50_Async_CMD_StoreChar(dy50, DY50_BUFFER_ID_1, dy50->handler.enroll.table_id);
 
 				if(ack_code == ACK_OK)
 				{
 					callback_is_valid = 1;
 
-					dy50->handler.enroll_state = DY50_ENROLL_HANDLER_STATE_IDLE;
+					dy50->handler.status.enroll = DY50_ENROLL_HANDLER_STATE_IDLE;
 					DY50_Mutex_Release(dy50, DY50_MUTEX_ENROLL_LOCK);
 				}
 				else if(ack_code != ACK_WATING_RESPONSE)
@@ -604,14 +604,14 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 	if(callback_is_valid == 1)
 	{
 		dy50->event.ack_code = ack_code;
-		dy50->event.data.enroll.last_state = dy50->enroll.last_state;
+		//dy50->event.data.enroll.last_state = dy50->handler.enroll.last_state;
 		DY50_EventCallback(dy50, DY50_STATUS_ENROLL_HANDLER);
 	}
 
 
 	if(dy50->mutex == DY50_MUTEX_ENROLL_LOCK)
 	{
-		if((HAL_GetTick() - dy50->enroll.last_measure_time) > ENROLL_MAX_TIME_IDLE_BETWEEN_READING)
+		if((HAL_GetTick() - dy50->handler.last_measure_time) > ENROLL_MAX_TIME_IDLE_BETWEEN_READING)
 		{
 			DY50_EnrollError(dy50);
 		}
@@ -696,15 +696,15 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 	if(HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin) == 0)
 	{
-		switch (dy50->handler.search_state)
+		switch (dy50->handler.status.search)
 		{
 			case DY50_SEARCH_STATE_IDLE:
 
-				if((HAL_GetTick() - dy50->search.last_measuere_time) > SEARCH_MIN_TIME_BETWEEN_READING)
+				if((HAL_GetTick() - dy50->handler.last_measure_time) > SEARCH_MIN_TIME_BETWEEN_READING)
 				{
 					if(DY50_Mutex_Acquire(dy50, DY50_MUTEX_SEARCH_LOCK))
 					{
-						dy50->search.last_measuere_time = HAL_GetTick();
+						dy50->handler.last_measure_time = HAL_GetTick();
 
 						last_id = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
 
@@ -714,12 +714,12 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 						}
 						else
 						{
-							dy50->handler.search_state = DY50_SEARCH_STATE_CMD_GENCHAR;
+							dy50->handler.status.search = DY50_SEARCH_STATE_CMD_GENCHAR;
 						}
 					}
 					else
 					{
-						dy50->handler.search_state = DY50_SEARCH_STATE_IDLE;
+						dy50->handler.status.search = DY50_SEARCH_STATE_IDLE;
 						ack_code = ACK_ERROR_MUTEX_IS_LOCK;
 					}
 
@@ -734,11 +734,11 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 				if(ack_code == ACK_OK)
 				{
-					dy50->handler.search_state = DY50_SEARCH_STATE_CMD_SEARCH;
+					dy50->handler.status.search = DY50_SEARCH_STATE_CMD_SEARCH;
 				}
 				else if(ack_code != ACK_WATING_RESPONSE)
 				{
-					dy50->handler.search_state = DY50_SEARCH_STATE_IDLE;
+					dy50->handler.status.search = DY50_SEARCH_STATE_IDLE;
 					DY50_Mutex_Release(dy50, DY50_MUTEX_SEARCH_LOCK);
 				}
 				break;
@@ -767,7 +767,7 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 				else if(ack_code != ACK_WATING_RESPONSE)
 				{
 					callback_is_valid = 0;
-					dy50->handler.search_state = DY50_SEARCH_STATE_IDLE;
+					dy50->handler.status.search = DY50_SEARCH_STATE_IDLE;
 					DY50_Mutex_Release(dy50, DY50_MUTEX_SEARCH_LOCK);
 				}
 
@@ -790,13 +790,13 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 	}
 	else
 	{
-		dy50->handler.search_state = DY50_SEARCH_STATE_IDLE;
+		dy50->handler.status.search = DY50_SEARCH_STATE_IDLE;
 		DY50_Mutex_Release(dy50, DY50_MUTEX_SEARCH_LOCK);
 		ack_code = ACK_ERROR;
 	}
 
-	if(dy50->handler.search_state == DY50_SEARCH_STATE_COMPLETED)
-		dy50->handler.search_state = DY50_SEARCH_STATE_IDLE;
+	if(dy50->handler.status.search == DY50_SEARCH_STATE_COMPLETED)
+		dy50->handler.status.search = DY50_SEARCH_STATE_IDLE;
 
 	return ack_code;
 
@@ -815,7 +815,7 @@ DY50_AckCode_t DY50_Math_FingerPrint(DY50_Typedef_t *dy50, uint16_t target_id)
 	if(ack_code == ACK_OK)
 	{
 		dy50->math_target_id = target_id;
-		dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
+		dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
 	}
 
 	return ack_code;
@@ -830,7 +830,7 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 
 	if(HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin) == 0)
 		{
-			switch (dy50->handler.match_state)
+			switch (dy50->handler.status.match)
 			{
 				case DY50_MATCH_STATE_IDLE:
 
@@ -842,12 +842,12 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 						}
 						else
 						{
-							dy50->handler.match_state = DY50_MATCH_STATE_CMD_GENCHAR;
+							dy50->handler.status.match = DY50_MATCH_STATE_CMD_GENCHAR;
 						}
 					}
 					else
 					{
-						dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
+						dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
 						ack_code = ACK_ERROR_MUTEX_IS_LOCK;
 					}
 					break;
@@ -858,11 +858,11 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 
 					if(ack_code == ACK_OK)
 					{
-						dy50->handler.match_state = DY50_MATCH_STATE_CMD_LOADCHAR;
+						dy50->handler.status.match = DY50_MATCH_STATE_CMD_LOADCHAR;
 					}
 					else if(ack_code != ACK_WATING_RESPONSE)
 					{
-						dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
+						dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
 						DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
 					}
 					break;
@@ -873,11 +873,11 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 
 					if(ack_code == ACK_OK)
 					{
-						dy50->handler.match_state = DY50_MATCH_STATE_CMD_MATCH;
+						dy50->handler.status.match = DY50_MATCH_STATE_CMD_MATCH;
 					}
 					else if(ack_code != ACK_WATING_RESPONSE)
 					{
-						dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
+						dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
 						DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
 					}
 
@@ -904,7 +904,7 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 					else if(ack_code != ACK_WATING_RESPONSE)
 					{
 						callback_is_valid = 0;
-						dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
+						dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
 						DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
 
 						DY50_ChageStatus(dy50, DY50_STATUS_IDLE);
@@ -917,7 +917,7 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 						DY50_EventCallback(dy50, DY50_STATUS_MATCH_HANDLER);
 
 						DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
-						dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
+						dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
 
 						DY50_ChageStatus(dy50, DY50_STATUS_IDLE); //return to IDLE status whether mutex is free (Error or successfully)
 
@@ -931,7 +931,7 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 		}
 		else
 		{
-			dy50->handler.match_state = DY50_MATCH_STATE_IDLE;
+			dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
 			DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
 			ack_code = ACK_ERROR;
 		}
@@ -952,8 +952,8 @@ DY50_AckCode_t DY50_DeleteTemplates(DY50_Typedef_t *dy50, uint16_t start_id, uin
 
 	if(ack_code == ACK_OK)
 	{
-		dy50->delete.id = start_id;
-		dy50->delete.num_of_templates = num_of_templates;
+		dy50->handler.delete.id = start_id;
+		dy50->handler.delete.num_of_templates = num_of_templates;
 	}
 
 	return ack_code;
@@ -980,8 +980,8 @@ DY50_AckCode_t Dy50_DeleteAllTemplates(DY50_Typedef_t *dy50)
 
 	if(ack_code == ACK_OK)
 	{
-		dy50->delete.id = 0;
-		dy50->delete.num_of_templates = (dy50->info.database_capacity - 1);
+		dy50->handler.delete.id = 0;
+		dy50->handler.delete.num_of_templates = (dy50->info.database_capacity - 1);
 	}
 
 	return ack_code;
@@ -993,7 +993,7 @@ DY50_AckCode_t DY50_DeleteTemplateHandler(DY50_Typedef_t *dy50)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-	if((dy50->delete.id >= dy50->info.database_capacity) || dy50->delete.num_of_templates == 0)
+	if((dy50->handler.delete.id >= dy50->info.database_capacity) || dy50->handler.delete.num_of_templates == 0)
 	{
 		dy50->status = DY50_STATUS_IDLE;
 		return ACK_ERROR_INVALID_PARAMETER;
@@ -1003,7 +1003,7 @@ DY50_AckCode_t DY50_DeleteTemplateHandler(DY50_Typedef_t *dy50)
 
 	if(DY50_Mutex_Acquire(dy50, DY50_MUTEX_DELETE_LOCK))
 	{
-		if((dy50->delete.id == 0) && (dy50->delete.num_of_templates == (dy50->info.database_capacity - 1)))
+		if((dy50->handler.delete.id == 0) && (dy50->handler.delete.num_of_templates == (dy50->info.database_capacity - 1)))
 		{
 			ack_code = DY50_Async_CMD_Empty(dy50);
 			if(ack_code != ACK_WATING_RESPONSE)
@@ -1016,12 +1016,12 @@ DY50_AckCode_t DY50_DeleteTemplateHandler(DY50_Typedef_t *dy50)
 		}
 		else
 		{
-			ack_code = DY50_Async_CMD_DeletChar(dy50, dy50->delete.id, dy50->delete.num_of_templates);
+			ack_code = DY50_Async_CMD_DeletChar(dy50, dy50->handler.delete.id, dy50->handler.delete.num_of_templates);
 
 			if(ack_code != ACK_WATING_RESPONSE)
 			{
 				if(ack_code == ACK_OK)
-					DY50_SetIndexTable(dy50, dy50->delete.id, 0);
+					DY50_SetIndexTable(dy50, dy50->handler.delete.id, 0);
 				dy50->status = DY50_STATUS_IDLE;
 				DY50_Mutex_Release(dy50, DY50_MUTEX_DELETE_LOCK);
 			}
@@ -1128,7 +1128,7 @@ __weak void DY50_EventCallback(DY50_Typedef_t *dy50, DY50_Status_t event)
 		{
 			case DY50_STATUS_ENROLL_HANDLER:
 
-				switch (dy50->enroll.last_state)
+				switch (dy50->event.data.enroll.last_state)
 				{
 				  case DY50_ENROLL_STATE_WRITE_BUFFER1:
 				  case DY50_ENROLL_STATE_WRITE_BUFFER2:
