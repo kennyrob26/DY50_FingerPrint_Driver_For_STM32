@@ -343,7 +343,7 @@ DY50_FingerTouchState_t DY50_FingerIsOnTouch(DY50_Typedef_t *dy50)
 
 	if(touch_state == 0) //Exist fingfer
 	{
-		if(((HAL_GetTick() - dy50->handler.enroll.debouncing_init_time) > TOUCH_DEBOUNCE_TIME))
+		if(((HAL_GetTick() - dy50->touch.click_time) > TOUCH_DEBOUNCE_TIME))
 		{
 			return DY50_FINGER_IN_TOUCH_ACCEPTED;
 		}
@@ -463,10 +463,12 @@ void DY50_FingerTouchInterrupt(DY50_Typedef_t *dy50)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return;
 
-	if(dy50->touch.flag == 0 && dy50->status == DY50_STATUS_ENROLL_HANDLER)
+	if(dy50->touch.flag == 0)
 	{
-		dy50->handler.enroll.debouncing_init_time = HAL_GetTick();
-		dy50->touch.flag = 1;
+		dy50->touch.click_time = HAL_GetTick();
+
+		if(dy50->status == DY50_STATUS_ENROLL_HANDLER)
+			dy50->touch.flag = 1;
 	}
 }
 
@@ -535,29 +537,34 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 
 			case DY50_ENROLL_HANDLER_CMD_ENROLL:
 
-				ack_code = DY50_Enroll(dy50);
-
-				if(ack_code != ACK_WATING_RESPONSE)
+				if(DY50_FingerIsOnTouch(dy50) == DY50_FINGER_IN_TOUCH_ACCEPTED)
 				{
-					if(ack_code == ACK_OK)
+
+					ack_code = DY50_Enroll(dy50);
+
+					if(ack_code != ACK_WATING_RESPONSE)
 					{
-						if(dy50->event.data.enroll.last_state == DY50_ENROLL_STATE_COMPLETE)
+						if(ack_code == ACK_OK)
 						{
-							dy50->handler.status.enroll = DY50_ENROLL_HANDLER_CMD_REG_MODEL;
+							if(dy50->event.data.enroll.last_state == DY50_ENROLL_STATE_COMPLETE)
+							{
+								dy50->handler.status.enroll = DY50_ENROLL_HANDLER_CMD_REG_MODEL;
+							}
+							else
+							{
+								callback_is_valid = 1;
+								dy50->touch.flag = 0;
+							}
 						}
 						else
 						{
-							callback_is_valid = 1;
-							dy50->touch.flag = 0;
+							DY50_EnrollError(dy50);
 						}
 					}
 					else
-					{
-						DY50_EnrollError(dy50);
-					}
+						callback_is_valid = 0;
+
 				}
-				else
-					callback_is_valid = 0;
 
 				break;
 
@@ -689,9 +696,8 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
-//	uint32_t time = HAL_GetTick();
-	if((HAL_GetTick() - dy50->handler.last_measure_time) < SEARCH_MIN_TIME_BETWEEN_READING)
-		return ACK_OK;
+//	if((HAL_GetTick() - dy50->handler.last_measure_time) < SEARCH_MIN_TIME_BETWEEN_READING)
+//		return ACK_OK;
 
 	DY50_AckCode_t ack_code = ACK_OK;
 
@@ -702,18 +708,21 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 		{
 			case DY50_SEARCH_STATE_IDLE:
 
-				if(DY50_Mutex_Acquire(dy50, DY50_MUTEX_SEARCH_LOCK))
+				if((HAL_GetTick() - dy50->handler.last_measure_time) > SEARCH_MIN_TIME_BETWEEN_READING)
 				{
-					uint16_t last_id_found = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
+					if(DY50_Mutex_Acquire(dy50, DY50_MUTEX_SEARCH_LOCK))
+					{
+						uint16_t last_id_found = DY50_FindLastIndexFilled(dy50, 0, (dy50->info.database_capacity - 1));
 
-					if(last_id_found > 0)		//DB is not empty
-						dy50->handler.status.search = DY50_SEARCH_STATE_CMD_GENCHAR;
+						if(last_id_found > 0)		//DB is not empty
+							dy50->handler.status.search = DY50_SEARCH_STATE_CMD_GENCHAR;
+						else
+							ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
+					}
 					else
-						ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND;
-				}
-				else
-				{
-					ack_code = ACK_ERROR_MUTEX_IS_LOCK;
+					{
+						ack_code = ACK_ERROR_MUTEX_IS_LOCK;
+					}
 				}
 
 			break;
@@ -735,7 +744,7 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 				if(ack_code != ACK_WATING_RESPONSE)
 				{
-					if(ack_code == ACK_OK || ack_code == ACK_ERROR_FINGERPRINT_NOT_FOUND)
+					if(ack_code == ACK_OK)
 					{
 						dy50->event.data.search.id_found =  ((uint16_t)dy50->uart.buf_rx.packet.payload[0]) << 8;
 						dy50->event.data.search.id_found |= (((uint16_t)dy50->uart.buf_rx.packet.payload[1]) & 0x00FF);
@@ -744,7 +753,13 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 						DY50_EventCallback(dy50, DY50_STATUS_SEARCH_FINGERPRINT);
 
-						DY50_Mutex_Release(dy50, DY50_MUTEX_SEARCH_LOCK);
+					}
+					else if(ack_code == ACK_ERROR_FINGERPRINT_NOT_FOUND)
+					{
+						dy50->event.data.search.id_found =  0xFFFF;
+						dy50->event.data.search.math_score = 0;
+
+						DY50_EventCallback(dy50, DY50_STATUS_SEARCH_FINGERPRINT);
 					}
 
 					dy50->handler.status.search = DY50_SEARCH_STATE_IDLE;
@@ -758,19 +773,13 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 		}
 
 	}
-	else
-	{
-		ack_code = ACK_ERROR;
-	}
+	//else
 
-	if(dy50->handler.status.search == DY50_SEARCH_STATE_COMPLETED)
-		dy50->handler.status.search = DY50_SEARCH_STATE_IDLE;
-
-
+	uint16_t time = HAL_GetTick() - dy50->touch.click_time;
+	uint8_t timeout = (time > SEARCH_TIMEOUT) ? 1 : 0;
 	//handle errors
-	if(ack_code != ACK_OK && ack_code != ACK_WATING_RESPONSE )
+	if((ack_code != ACK_OK && ack_code != ACK_WATING_RESPONSE) || timeout )
 	{
-		//dy50->handler.last_measure_time = HAL_GetTick();
 		dy50->handler.status.search = DY50_SEARCH_STATE_IDLE;
 		DY50_Mutex_Release(dy50, DY50_MUTEX_SEARCH_LOCK);
 	}

@@ -179,6 +179,7 @@ typedef struct
 {
 	DY50_Gpio_t gpio;
 	uint8_t flag;
+	uint32_t click_time;
 }DY50_Touch_Info_t;
 
 typedef struct
@@ -202,7 +203,7 @@ typedef enum
 
 typedef struct
 {
-	uint32_t debouncing_init_time;
+	//uint32_t debouncing_init_time;
 	int16_t table_id;
 }DY50_Enroll_t;
 

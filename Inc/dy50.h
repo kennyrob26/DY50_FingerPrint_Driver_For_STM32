@@ -15,7 +15,8 @@
 #define TOUCH_DEBOUNCE_TIME 200
 
 #define ENROLL_MAX_TIME_IDLE_BETWEEN_READING 8000
-#define SEARCH_MIN_TIME_BETWEEN_READING 200
+#define SEARCH_MIN_TIME_BETWEEN_READING 1000
+#define SEARCH_TIMEOUT 3000
 
 DY50_AckCode_t DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *touch_gpio_port, uint16_t touch_gpio_pin);
 DY50_AckCode_t  DY50_ReInit(DY50_Typedef_t *dy50);
