@@ -63,6 +63,8 @@ typedef enum
 
 	ACK_ERROR_FINGERPRINT_NOT_FOUND = 0x09,		//In Search Command
 
+	ACK_WAITING_FINGER            = 240,
+
 	ACK_ERROR_MUTEX_IS_LOCK       = 241,
 
 	ACK_WATING_RESPONSE           = 242,

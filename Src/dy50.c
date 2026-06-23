@@ -604,7 +604,6 @@ DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50)
 	if(callback_is_valid == 1)
 	{
 		dy50->event.ack_code = ack_code;
-		//dy50->event.data.enroll.last_state = dy50->handler.enroll.last_state;
 		DY50_EventCallback(dy50, DY50_STATUS_ENROLL_HANDLER);
 	}
 
@@ -773,8 +772,6 @@ DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50)
 
 				if(callback_is_valid)
 				{
-					//DY50_SearchResponseCallBack(dy50, &search_return);
-
 					dy50->event.data.search.id_found = search_return.id_found;
 					dy50->event.data.search.math_score = search_return.math_score;
 					DY50_EventCallback(dy50, DY50_STATUS_SEARCH_FINGERPRINT);
@@ -826,117 +823,85 @@ DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50)
 	if(dy50->status == DY50_STATUS_UNINITIALIZED)
 		return ACK_ERROR_DY50_UNINITIALIZED;
 
+	if(dy50->math_target_id >= dy50->info.database_capacity)
+	{
+		dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
+		return ACK_ERROR_FINGERPRINT_NOT_FOUND; //This is an impossible case if you use "DY50_Math_FingerPrint"
+	}
+
 	DY50_AckCode_t ack_code = ACK_OK;
 
 	if(HAL_GPIO_ReadPin(dy50->touch.gpio.port, dy50->touch.gpio.pin) == 0)
+	{
+		switch (dy50->handler.status.match)
 		{
-			switch (dy50->handler.status.match)
-			{
-				case DY50_MATCH_STATE_IDLE:
+			case DY50_MATCH_STATE_IDLE:
 
-					if(DY50_Mutex_Acquire(dy50, DY50_MUTEX_MATCH_LOCK))
-					{
-						if(dy50->math_target_id >= dy50->info.database_capacity)
-						{
-							ack_code = ACK_ERROR_FINGERPRINT_NOT_FOUND; //This is an impossible case if you use "DY50_Math_FingerPrint"
-						}
-						else
-						{
-							dy50->handler.status.match = DY50_MATCH_STATE_CMD_GENCHAR;
-						}
-					}
-					else
-					{
-						dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
-						ack_code = ACK_ERROR_MUTEX_IS_LOCK;
-					}
-					break;
+				if(DY50_Mutex_Acquire(dy50, DY50_MUTEX_MATCH_LOCK))
+					dy50->handler.status.match = DY50_MATCH_STATE_CMD_GENCHAR;
+				else
+					ack_code = ACK_ERROR_MUTEX_IS_LOCK;
 
-				case DY50_MATCH_STATE_CMD_GENCHAR:
+			break;
 
-					ack_code = DY50_GenerateCharDMA(dy50, DY50_BUFFER_ID_1);
+			case DY50_MATCH_STATE_CMD_GENCHAR:
 
-					if(ack_code == ACK_OK)
-					{
-						dy50->handler.status.match = DY50_MATCH_STATE_CMD_LOADCHAR;
-					}
-					else if(ack_code != ACK_WATING_RESPONSE)
-					{
-						dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
-						DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
-					}
-					break;
+				ack_code = DY50_GenerateCharDMA(dy50, DY50_BUFFER_ID_1);
 
-				case DY50_MATCH_STATE_CMD_LOADCHAR:
+				if(ack_code == ACK_OK)
+					dy50->handler.status.match = DY50_MATCH_STATE_CMD_LOADCHAR;
 
-					ack_code = DY50_Async_CMD_LoadChar(dy50, DY50_BUFFER_ID_2, dy50->math_target_id);
+			break;
 
-					if(ack_code == ACK_OK)
-					{
-						dy50->handler.status.match = DY50_MATCH_STATE_CMD_MATCH;
-					}
-					else if(ack_code != ACK_WATING_RESPONSE)
-					{
-						dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
-						DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
-					}
+			case DY50_MATCH_STATE_CMD_LOADCHAR:
 
-					break;
+				ack_code = DY50_Async_CMD_LoadChar(dy50, DY50_BUFFER_ID_2, dy50->math_target_id);
 
-				case DY50_MATCH_STATE_CMD_MATCH:
+				if(ack_code == ACK_OK)
+					dy50->handler.status.match = DY50_MATCH_STATE_CMD_MATCH;
 
-					ack_code = DY50_Async_CMD_Match(dy50);
+			break;
 
-					uint8_t callback_is_valid = 0;
+			case DY50_MATCH_STATE_CMD_MATCH:
 
-					uint8_t math_score = 0;
+				ack_code = DY50_Async_CMD_Match(dy50);
 
-					if(ack_code == ACK_OK)
-					{
-						math_score = dy50->uart.buf_rx.packet.payload[1]; //some right byte
+				if(ack_code == ACK_OK || ack_code == ACK_ERROR_UNMATCHED)
+				{
 
-						callback_is_valid = 1;
-					}
-					else if(ack_code == ACK_ERROR_UNMATCHED)
-					{
-						callback_is_valid = 1;
-					}
-					else if(ack_code != ACK_WATING_RESPONSE)
-					{
-						callback_is_valid = 0;
-						dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
-						DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
+					dy50->event.data.match.target_id  = dy50->math_target_id;
+					dy50->event.data.match.math_score = dy50->uart.buf_rx.packet.payload[1]; //some right byte;
+					DY50_EventCallback(dy50, DY50_STATUS_MATCH_HANDLER);
 
-						DY50_ChageStatus(dy50, DY50_STATUS_IDLE);
-					}
+					DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
+					dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
 
-					if(callback_is_valid)
-					{
-						dy50->event.data.match.target_id  = dy50->math_target_id;
-						dy50->event.data.match.math_score = math_score;
-						DY50_EventCallback(dy50, DY50_STATUS_MATCH_HANDLER);
+					DY50_ChageStatus(dy50, DY50_STATUS_IDLE); //return to IDLE status whether mutex is free (Error or successfully)
 
-						DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
-						dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
+				}
 
-						DY50_ChageStatus(dy50, DY50_STATUS_IDLE); //return to IDLE status whether mutex is free (Error or successfully)
+			break;
 
-					}
-
-					break;
-				default:
-					break;
-			}
-
-		}
-		else
-		{
-			dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
-			DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
-			ack_code = ACK_ERROR;
+			default:
+				break;
 		}
 
-		return ack_code;
+	}
+	else
+	{
+//			dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
+//			DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
+		//ack_code = ACK_WAITING_FINGER;
+	}
+
+	if(ack_code != ACK_OK && ack_code != ACK_WATING_RESPONSE )
+	{
+		dy50->handler.status.match = DY50_MATCH_STATE_IDLE;
+		DY50_Mutex_Release(dy50, DY50_MUTEX_MATCH_LOCK);
+		DY50_ChageStatus(dy50, DY50_STATUS_IDLE);
+	}
+
+	return ack_code;
 }
 
 
@@ -1082,6 +1047,7 @@ DY50_AckCode_t DY50_ChageStatus(DY50_Typedef_t *dy50, DY50_Status_t new_status)
 	if(dy50->mutex == DY50_MUTEX_IS_FREE)
 	{
 		dy50->status = new_status;
+		dy50->handler.status.raw = 0;   //IDLE status
 		ack_code = ACK_OK;
 	}
 	else
