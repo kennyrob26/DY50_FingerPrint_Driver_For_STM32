@@ -46,7 +46,7 @@ typedef enum
 	DY50_INIT_READ_INDEX_TABLE   = 3,
 	DY50_INIT_COMPLETE           = 4,
 	DY50_INIT_ERROR              = 5,
-}DY50_Init_State_Machine;
+}DY50_Init_State;
 
 typedef enum
 {
@@ -203,7 +203,6 @@ typedef enum
 
 typedef struct
 {
-	//uint32_t debouncing_init_time;
 	int16_t table_id;
 }DY50_Enroll_t;
 

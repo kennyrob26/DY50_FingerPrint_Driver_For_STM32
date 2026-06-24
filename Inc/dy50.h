@@ -16,7 +16,7 @@
 
 #define ENROLL_MAX_TIME_IDLE_BETWEEN_READING 8000
 #define SEARCH_MIN_TIME_BETWEEN_READING 1000
-#define SEARCH_TIMEOUT 3000
+#define SEARCH_TIMEOUT 5000
 
 DY50_AckCode_t DY50_Init(DY50_Typedef_t *dy50, UART_HandleTypeDef *huart, GPIO_TypeDef *touch_gpio_port, uint16_t touch_gpio_pin);
 DY50_AckCode_t  DY50_ReInit(DY50_Typedef_t *dy50);
@@ -32,7 +32,7 @@ void DY50_FingerTouchInterrupt(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_EnrollHandler(DY50_Typedef_t *dy50);
 DY50_AckCode_t DY50_SearchFingerPrint(DY50_Typedef_t *dy50);
 
-DY50_AckCode_t DY50_Math_FingerPrint(DY50_Typedef_t *dy50, uint16_t target_id);
+DY50_AckCode_t DY50_Match_FingerPrint(DY50_Typedef_t *dy50, uint16_t target_id);
 DY50_AckCode_t DY50_MatchFingerPrintHandler(DY50_Typedef_t *dy50);
 
 DY50_AckCode_t DY50_DeleteTemplates(DY50_Typedef_t *dy50, uint16_t start_id, uint16_t num_of_templates);
